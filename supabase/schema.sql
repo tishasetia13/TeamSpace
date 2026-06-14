@@ -225,3 +225,97 @@ $$;
 grant execute on function public.create_workspace(text)        to authenticated;
 grant execute on function public.workspace_preview(uuid)        to authenticated;
 grant execute on function public.join_workspace_by_token(uuid)  to authenticated;
+
+
+-- ============================================================================
+-- Milestone 3 — Shared live chat feed
+-- (Re-running this section is safe; everything is guarded.)
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 8. messages (the shared feed)
+-- One row per message in a workspace's single live feed.
+--   * user_id is NULLABLE on purpose: a human author is a profile id, but
+--     agents/system posts (added in M4+) will have no user_id.
+--   * type lets the feed hold more than plain chat later, without a rebuild:
+--       'human'         — a person typed it (all we create in M3)
+--       'agent_mention' — an agent's reply to an @mention   (M4+)
+--       'agent_summary' — auto-summary from a 1-on-1 session (M4+)
+--       'activity'      — workspace events (member joined…)  (M4+)
+-- ----------------------------------------------------------------------------
+create table if not exists public.messages (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  user_id      uuid references public.profiles(id) on delete set null,
+  type         text not null default 'human'
+                 check (type in ('human','agent_mention','agent_summary','activity')),
+  body         text not null check (char_length(trim(body)) between 1 and 4000),
+  created_at   timestamptz not null default now()
+);
+
+-- Fast "give me this workspace's messages in order" lookups.
+create index if not exists messages_workspace_created_idx
+  on public.messages (workspace_id, created_at);
+
+-- ----------------------------------------------------------------------------
+-- 9. Row Level Security: members can READ their workspace's messages.
+--    (As before, there is NO insert policy — all writes go through the
+--     post_message() function below, which bypasses RLS safely.)
+-- ----------------------------------------------------------------------------
+alter table public.messages enable row level security;
+
+drop policy if exists "members can read workspace messages" on public.messages;
+create policy "members can read workspace messages"
+  on public.messages for select
+  to authenticated
+  using ( public.is_workspace_member(workspace_id) );
+
+-- ----------------------------------------------------------------------------
+-- 10. post_message: the only way to write to the feed. Refuses unless the
+--     caller is a real member of the workspace.
+-- ----------------------------------------------------------------------------
+create or replace function public.post_message(p_workspace_id uuid, p_body text)
+returns public.messages
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_msg  public.messages;
+begin
+  if v_user is null then
+    raise exception 'You must be signed in to post.';
+  end if;
+  if not public.is_workspace_member(p_workspace_id) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  if p_body is null or char_length(trim(p_body)) = 0 then
+    raise exception 'Message cannot be empty.';
+  end if;
+
+  insert into public.messages (workspace_id, user_id, type, body)
+  values (p_workspace_id, v_user, 'human', trim(p_body))
+  returning * into v_msg;
+
+  return v_msg;
+end;
+$$;
+
+grant execute on function public.post_message(uuid, text) to authenticated;
+
+-- ----------------------------------------------------------------------------
+-- 11. Turn on Realtime for messages so new rows push to everyone instantly.
+--     Wrapped in a guard so re-running this file doesn't error.
+-- ----------------------------------------------------------------------------
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+end $$;

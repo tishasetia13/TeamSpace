@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import InviteLink from '@/components/workspaces/InviteLink'
+import ChatFeed from '@/components/workspaces/ChatFeed'
+import type { ChatMessage } from '@/app/actions/messages'
 
 type MemberRow = {
   role: string
@@ -45,6 +47,25 @@ export default async function WorkspacePage({
 
   const members = (memberData ?? []) as unknown as MemberRow[]
 
+  // Build a quick user_id -> name lookup so the feed can label messages
+  // without each message needing its own database join.
+  const memberNames: Record<string, string> = {}
+  for (const m of members) {
+    memberNames[m.user_id] =
+      m.profiles?.display_name || m.profiles?.email || 'Unknown user'
+  }
+
+  // Load the existing conversation (oldest first). RLS guarantees we only get
+  // messages from workspaces we belong to.
+  const { data: messageData } = await supabase
+    .from('messages')
+    .select('id, workspace_id, user_id, type, body, created_at')
+    .eq('workspace_id', id)
+    .order('created_at', { ascending: true })
+    .limit(200)
+
+  const initialMessages = (messageData ?? []) as ChatMessage[]
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4">
       <div className="mx-auto w-full max-w-2xl space-y-6 py-10">
@@ -63,6 +84,13 @@ export default async function WorkspacePage({
             {members.length} {members.length === 1 ? 'member' : 'members'}
           </p>
         </div>
+
+        <ChatFeed
+          workspaceId={workspace.id}
+          currentUserId={user.id}
+          initialMessages={initialMessages}
+          memberNames={memberNames}
+        />
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">

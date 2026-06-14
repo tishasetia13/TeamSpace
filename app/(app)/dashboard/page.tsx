@@ -20,9 +20,13 @@ export default async function DashboardPage() {
   }
 
   // Every workspace this user belongs to (newest first).
+  // Note: RLS lets us read every membership row of a workspace we're in
+  // (so the workspace page can show the full member list), so we must
+  // filter to our own rows here ourselves.
   const { data } = await supabase
     .from('workspace_members')
     .select('role, workspaces(id, name, created_at)')
+    .eq('user_id', user.id)
     .order('joined_at', { ascending: false })
 
   const memberships = (data ?? []) as unknown as MembershipRow[]
