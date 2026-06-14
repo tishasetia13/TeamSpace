@@ -319,3 +319,246 @@ begin
     alter publication supabase_realtime add table public.messages;
   end if;
 end $$;
+
+
+-- ============================================================================
+-- Milestone 4 (Step A) — AI Agents: creation + secure API-key storage
+-- (Re-running this section is safe; everything is guarded.)
+--
+-- Design in one sentence: the PUBLIC facts about an agent (name, prompt,
+-- provider, model) live in `agents` where teammates can read them, but the
+-- SECRET API key lives in a separate locked-down `agent_secrets` table that
+-- nobody can read or write through the normal app — only the SECURITY DEFINER
+-- functions below can touch it. On top of that, the key is already encrypted by
+-- the app (AES-256-GCM) BEFORE it ever reaches the database, so Postgres never
+-- sees the real key at all.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 12. agents — the public-to-teammates facts about an agent.
+-- ----------------------------------------------------------------------------
+create table if not exists public.agents (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references public.workspaces(id) on delete cascade,
+  -- nullable + set null: an agent belongs to the workspace, so it survives even
+  -- if the teammate who created it later leaves.
+  created_by    uuid references public.profiles(id) on delete set null,
+  name          text not null check (char_length(trim(name)) between 1 and 60),
+  system_prompt text not null check (char_length(trim(system_prompt)) between 1 and 8000),
+  provider      text not null check (provider in ('anthropic','openai','gemini')),
+  model         text not null check (char_length(trim(model)) between 1 and 120),
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists agents_workspace_idx
+  on public.agents (workspace_id, created_at);
+
+-- ----------------------------------------------------------------------------
+-- 13. agent_secrets — the LOCKED BOX. One row per agent, holding ONLY the
+--     already-encrypted API key. RLS is on with NO policies, and we revoke all
+--     direct grants, so this table is unreadable/unwritable through the app.
+--     The only way in is the SECURITY DEFINER functions in sections 14–15.
+-- ----------------------------------------------------------------------------
+create table if not exists public.agent_secrets (
+  agent_id       uuid primary key references public.agents(id) on delete cascade,
+  api_key_cipher text not null
+);
+
+alter table public.agents        enable row level security;
+alter table public.agent_secrets enable row level security;
+
+-- Extra belt-and-braces on top of "RLS on + no policy": take away every direct
+-- privilege so even a policy mistake later can't leak the encrypted keys.
+revoke all on public.agent_secrets from anon, authenticated;
+
+-- agents: members can READ agents in their workspace. As elsewhere, there are
+-- NO write policies — every write goes through the functions below.
+drop policy if exists "members can read workspace agents" on public.agents;
+create policy "members can read workspace agents"
+  on public.agents for select
+  to authenticated
+  using ( public.is_workspace_member(workspace_id) );
+
+-- ----------------------------------------------------------------------------
+-- 14. create_agent — the only way to make an agent. Verifies the caller is a
+--     member, then writes the public row AND the encrypted secret atomically.
+--     p_api_key_cipher is ALREADY encrypted by the app; we just store it.
+-- ----------------------------------------------------------------------------
+create or replace function public.create_agent(
+  p_workspace_id   uuid,
+  p_name           text,
+  p_system_prompt  text,
+  p_provider       text,
+  p_model          text,
+  p_api_key_cipher text
+)
+returns public.agents
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user  uuid := auth.uid();
+  v_agent public.agents;
+begin
+  if v_user is null then
+    raise exception 'You must be signed in to create an agent.';
+  end if;
+  if not public.is_workspace_member(p_workspace_id) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  if p_name is null or char_length(trim(p_name)) = 0 then
+    raise exception 'Agent name is required.';
+  end if;
+  if p_system_prompt is null or char_length(trim(p_system_prompt)) = 0 then
+    raise exception 'System prompt is required.';
+  end if;
+  if p_provider not in ('anthropic','openai','gemini') then
+    raise exception 'Unknown provider.';
+  end if;
+  if p_model is null or char_length(trim(p_model)) = 0 then
+    raise exception 'Model is required.';
+  end if;
+  if p_api_key_cipher is null or char_length(p_api_key_cipher) = 0 then
+    raise exception 'Missing API key.';
+  end if;
+
+  insert into public.agents
+    (workspace_id, created_by, name, system_prompt, provider, model)
+  values
+    (p_workspace_id, v_user, trim(p_name), trim(p_system_prompt), p_provider, trim(p_model))
+  returning * into v_agent;
+
+  insert into public.agent_secrets (agent_id, api_key_cipher)
+  values (v_agent.id, p_api_key_cipher);
+
+  return v_agent;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 15. delete_agent — any member of the agent's workspace can remove it.
+--     Deleting the agent row cascades to delete its secret automatically.
+-- ----------------------------------------------------------------------------
+create or replace function public.delete_agent(p_agent_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ws uuid;
+begin
+  select workspace_id into v_ws from public.agents where id = p_agent_id;
+  if v_ws is null then
+    raise exception 'Agent not found.';
+  end if;
+  if not public.is_workspace_member(v_ws) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  delete from public.agents where id = p_agent_id;
+end;
+$$;
+
+grant execute on function
+  public.create_agent(uuid, text, text, text, text, text) to authenticated;
+grant execute on function public.delete_agent(uuid) to authenticated;
+
+
+-- ============================================================================
+-- Milestone 4 (Step B) — Agents reply in the feed (@mention → agent_mention)
+-- (Re-running this section is safe; everything is guarded.)
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 16. messages.agent_id — which agent authored an agent_mention/agent_summary.
+--     Nullable: human messages have no agent_id. on delete set null so deleting
+--     an agent doesn't wipe its past messages from the feed.
+-- ----------------------------------------------------------------------------
+alter table public.messages
+  add column if not exists agent_id uuid references public.agents(id) on delete set null;
+
+-- Agent replies (full code, plans) can be much longer than a human chat line,
+-- so raise the body ceiling. (The composer still caps human messages at 4000.)
+alter table public.messages drop constraint if exists messages_body_check;
+alter table public.messages
+  add constraint messages_body_check check (char_length(trim(body)) between 1 and 100000);
+
+-- ----------------------------------------------------------------------------
+-- 17. get_agent_secret — hands back the ENCRYPTED key for an agent, but only to
+--     a member of that agent's workspace. SECURITY DEFINER so it can read the
+--     locked-down agent_secrets table. The value is still encrypted — the app
+--     decrypts it server-side just before calling the LLM.
+-- ----------------------------------------------------------------------------
+create or replace function public.get_agent_secret(p_agent_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ws     uuid;
+  v_cipher text;
+begin
+  select workspace_id into v_ws from public.agents where id = p_agent_id;
+  if v_ws is null then
+    raise exception 'Agent not found.';
+  end if;
+  if not public.is_workspace_member(v_ws) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  select api_key_cipher into v_cipher
+    from public.agent_secrets where agent_id = p_agent_id;
+  return v_cipher;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 18. post_agent_message — write a message AUTHORED BY AN AGENT into the feed.
+--     The human who triggered it must be a member, and the agent must belong to
+--     the same workspace. user_id is null (no human author); agent_id names the
+--     agent so the feed can label the message.
+-- ----------------------------------------------------------------------------
+create or replace function public.post_agent_message(
+  p_workspace_id uuid,
+  p_agent_id     uuid,
+  p_body         text,
+  p_type         text
+)
+returns public.messages
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_ws   uuid;
+  v_msg  public.messages;
+begin
+  if v_user is null then
+    raise exception 'You must be signed in.';
+  end if;
+  if not public.is_workspace_member(p_workspace_id) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  select workspace_id into v_ws from public.agents where id = p_agent_id;
+  if v_ws is null or v_ws <> p_workspace_id then
+    raise exception 'That agent does not belong to this workspace.';
+  end if;
+  if p_type not in ('agent_mention','agent_summary','activity') then
+    raise exception 'Invalid agent message type.';
+  end if;
+  if p_body is null or char_length(trim(p_body)) = 0 then
+    raise exception 'Message cannot be empty.';
+  end if;
+
+  insert into public.messages (workspace_id, user_id, agent_id, type, body)
+  values (p_workspace_id, null, p_agent_id, p_type, trim(p_body))
+  returning * into v_msg;
+
+  return v_msg;
+end;
+$$;
+
+grant execute on function public.get_agent_secret(uuid) to authenticated;
+grant execute on function public.post_agent_message(uuid, uuid, text, text) to authenticated;

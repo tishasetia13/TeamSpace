@@ -3,7 +3,9 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import InviteLink from '@/components/workspaces/InviteLink'
 import ChatFeed from '@/components/workspaces/ChatFeed'
+import AgentsPanel from '@/components/agents/AgentsPanel'
 import type { ChatMessage } from '@/app/actions/messages'
+import type { Agent } from '@/app/actions/agents'
 
 type MemberRow = {
   role: string
@@ -59,12 +61,22 @@ export default async function WorkspacePage({
   // messages from workspaces we belong to.
   const { data: messageData } = await supabase
     .from('messages')
-    .select('id, workspace_id, user_id, type, body, created_at')
+    .select('id, workspace_id, user_id, agent_id, type, body, created_at')
     .eq('workspace_id', id)
     .order('created_at', { ascending: true })
     .limit(200)
 
   const initialMessages = (messageData ?? []) as ChatMessage[]
+
+  // Load this workspace's agents (public fields only — the encrypted API key
+  // never leaves the server). RLS limits this to workspaces we belong to.
+  const { data: agentData } = await supabase
+    .from('agents')
+    .select('id, workspace_id, created_by, name, system_prompt, provider, model, created_at')
+    .eq('workspace_id', id)
+    .order('created_at', { ascending: true })
+
+  const agents = (agentData ?? []) as Agent[]
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4">
@@ -90,7 +102,10 @@ export default async function WorkspacePage({
           currentUserId={user.id}
           initialMessages={initialMessages}
           memberNames={memberNames}
+          agents={agents.map((a) => ({ id: a.id, name: a.name }))}
         />
+
+        <AgentsPanel workspaceId={workspace.id} agents={agents} />
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">

@@ -8,7 +8,8 @@ import { createClient } from '@/lib/supabase/server'
 export type ChatMessage = {
   id: string
   workspace_id: string
-  user_id: string | null // null = posted by an agent/system (used later, M4+)
+  user_id: string | null // null = posted by an agent/system
+  agent_id: string | null // set when an agent authored the message (M4 Step B+)
   type: 'human' | 'agent_mention' | 'agent_summary' | 'activity'
   body: string
   created_at: string
