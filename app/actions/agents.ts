@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { encryptSecret, decryptSecret } from '@/lib/crypto/secrets'
 import { getProvider, type ProviderId } from '@/lib/agents/providers'
-import { callAnthropicAgent } from '@/lib/agents/anthropic'
+import { askAgent } from '@/lib/agents/ask'
 import type { ChatMessage } from '@/app/actions/messages'
 
 // The safe-to-show shape of an agent. This deliberately does NOT include the
@@ -223,10 +223,12 @@ export async function mentionAgentAction(
   // Build the recent conversation as a labelled transcript the agent can read.
   const userContent = await buildFeedContext(supabase, workspaceId, agent.name)
 
-  // Ask the agent's LLM for a reply (uses the agent's own key + model).
+  // Ask the agent's LLM for a reply (uses the agent's own key + model). The
+  // translator picks the right provider module based on the agent's provider.
   let reply: string
   try {
-    reply = await callAnthropicAgent({
+    reply = await askAgent({
+      provider: provider.id,
       apiKey,
       model: agent.model,
       system: agent.system_prompt,

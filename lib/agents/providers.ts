@@ -31,18 +31,22 @@ export const PROVIDERS: ProviderInfo[] = [
   {
     id: 'openai',
     label: 'OpenAI (GPT)',
-    // Finalized when OpenAI is wired up (Step D).
-    defaultModel: 'gpt-4o',
+    // Wired up in Step D. gpt-4.1-mini is the cheapest current OpenAI model that
+    // still supports the built-in web search tool (the others are gpt-5.5 and
+    // gpt-4.1) — cost-appropriate for frequent chat replies on the user's key.
+    defaultModel: 'gpt-4.1-mini',
     keyHint: 'Starts with “sk-”. From platform.openai.com.',
-    enabled: false,
+    enabled: true,
   },
   {
     id: 'gemini',
     label: 'Google (Gemini)',
-    // Finalized when Gemini is wired up (Step E).
+    // Wired up in Step E. gemini-2.5-flash is a current model that supports
+    // Google Search grounding and has a free tier — good for low-cost testing.
+    // (Newer 3.x flash models exist if more capability is wanted later.)
     defaultModel: 'gemini-2.5-flash',
     keyHint: 'From Google AI Studio (aistudio.google.com).',
-    enabled: false,
+    enabled: true,
   },
 ]
 
