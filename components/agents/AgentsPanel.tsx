@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { deleteAgentAction, type Agent } from '@/app/actions/agents'
 import { getProvider } from '@/lib/agents/providers'
 import { Button } from '@/components/ui/button'
@@ -56,9 +57,12 @@ export default function AgentsPanel({ workspaceId, agents }: Props) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+                    <Link
+                      href={`/workspaces/${workspaceId}/agents/${agent.id}`}
+                      className="truncate text-sm font-medium text-zinc-800 hover:text-indigo-600 hover:underline dark:text-zinc-100 dark:hover:text-indigo-300"
+                    >
                       {agent.name}
-                    </span>
+                    </Link>
                     <span className="shrink-0 rounded-full bg-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                       {p?.label ?? agent.provider}
                     </span>
@@ -75,15 +79,23 @@ export default function AgentsPanel({ workspaceId, agents }: Props) {
                       Model: {agent.model}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedId(expanded ? null : agent.id)
-                    }
-                    className="mt-1 text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  >
-                    {expanded ? 'Hide details' : 'Show details'}
-                  </button>
+                  <div className="mt-1 flex items-center gap-3">
+                    <Link
+                      href={`/workspaces/${workspaceId}/agents/${agent.id}`}
+                      className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                    >
+                      1-on-1 chat →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedId(expanded ? null : agent.id)
+                      }
+                      className="text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    >
+                      {expanded ? 'Hide details' : 'Show details'}
+                    </button>
+                  </div>
                 </div>
                 <Button
                   variant="ghost"

@@ -209,6 +209,11 @@ export default function ChatFeed({
                     AI
                   </span>
                 )}
+                {m.type === 'agent_summary' && (
+                  <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    Summary from 1-on-1
+                  </span>
+                )}
                 <span className="text-zinc-300 dark:text-zinc-600">
                   {formatTime(m.created_at)}
                 </span>

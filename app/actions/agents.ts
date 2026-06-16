@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { encryptSecret, decryptSecret } from '@/lib/crypto/secrets'
-import { getProvider, type ProviderId } from '@/lib/agents/providers'
+import { getProvider, type ProviderId, type ProviderInfo } from '@/lib/agents/providers'
 import { askAgent } from '@/lib/agents/ask'
 import type { ChatMessage } from '@/app/actions/messages'
 
@@ -169,23 +169,31 @@ export type MentionResult = { error: string | null; message?: ChatMessage }
 // How many recent feed messages to give the agent as context.
 const FEED_CONTEXT_LIMIT = 40
 
-// Called when a human @mentions an agent in the feed. It gathers the recent
-// conversation, asks the agent's LLM (using the agent's own API key) for a
-// reply, and posts that reply back into the feed as an `agent_mention` message.
-// The agent reply then reaches everyone live over Realtime, just like a human
-// message.
-export async function mentionAgentAction(
+// The agent fields the LLM call needs, plus its provider config and the
+// decrypted key. Returned by loadAgentForCall below.
+type LoadedAgent = {
+  agent: {
+    id: string
+    name: string
+    system_prompt: string
+    provider: ProviderId
+    model: string
+    workspace_id: string
+  }
+  provider: ProviderInfo
+  apiKey: string
+}
+
+// Shared setup for ANY action that needs to actually call an agent's LLM
+// (feed @mention, 1-on-1 chat, session summary). It loads the agent's public
+// config (RLS confirms our membership), checks the provider is wired up, then
+// fetches + decrypts the agent's own API key right here on the server. Returns
+// either a friendly { error } or { error: null, loaded }.
+async function loadAgentForCall(
+  supabase: Awaited<ReturnType<typeof createClient>>,
   workspaceId: string,
   agentId: string,
-): Promise<MentionResult> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: 'You must be signed in.' }
-
-  // Load the agent's public config. RLS only returns it if we're a member of
-  // its workspace, so this also confirms our access.
+): Promise<{ error: string } | { error: null; loaded: LoadedAgent }> {
   const { data: agent } = await supabase
     .from('agents')
     .select('id, name, system_prompt, provider, model, workspace_id')
@@ -219,6 +227,32 @@ export async function mentionAgentAction(
   } catch {
     return { error: 'This agent’s stored API key could not be read.' }
   }
+
+  return {
+    error: null,
+    loaded: { agent: agent as LoadedAgent['agent'], provider, apiKey },
+  }
+}
+
+// Called when a human @mentions an agent in the feed. It gathers the recent
+// conversation, asks the agent's LLM (using the agent's own API key) for a
+// reply, and posts that reply back into the feed as an `agent_mention` message.
+// The agent reply then reaches everyone live over Realtime, just like a human
+// message.
+export async function mentionAgentAction(
+  workspaceId: string,
+  agentId: string,
+): Promise<MentionResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  // Load the agent, confirm its provider is wired up, and decrypt its key.
+  const result = await loadAgentForCall(supabase, workspaceId, agentId)
+  if (result.error !== null) return { error: result.error }
+  const { agent, provider, apiKey } = result.loaded
 
   // Build the recent conversation as a labelled transcript the agent can read.
   const userContent = await buildFeedContext(supabase, workspaceId, agent.name)
@@ -317,5 +351,234 @@ async function buildFeedContext(
     lines.join('\n'),
     '',
     `You (${agentName}) were just @mentioned. Write a genuinely helpful, substantive reply that continues the conversation and does real work for the team. Reply with only your message — do not prefix it with your name or "[${agentName}]:".`,
+  ].join('\n')
+}
+
+// ============================================================================
+// 1-on-1 agent chat (M4 final): a PRIVATE deep-work thread between one human and
+// one agent. Separate from the shared feed — each teammate has their own thread.
+// ============================================================================
+
+// One turn in a private 1-on-1 thread. Matches the agent_chat_messages table.
+export type AgentChatMessage = {
+  id: string
+  workspace_id: string
+  agent_id: string
+  user_id: string
+  role: 'user' | 'agent'
+  body: string
+  created_at: string
+}
+
+export type AgentChatSendResult = {
+  error: string | null
+  userMessage?: AgentChatMessage
+  agentMessage?: AgentChatMessage
+}
+
+// How many recent turns of the 1-on-1 to feed back to the agent as context.
+const AGENT_CHAT_HISTORY_LIMIT = 40
+
+// Send a message in a 1-on-1 thread and get the agent's reply. Stores the
+// human's turn, gives the agent the recent thread as context (NOT the shared
+// feed — this is private), asks its LLM, then stores + returns the reply.
+export async function sendAgentChatMessageAction(
+  workspaceId: string,
+  agentId: string,
+  body: string,
+): Promise<AgentChatSendResult> {
+  const trimmed = (body ?? '').trim()
+  if (!trimmed) return { error: 'Message cannot be empty.' }
+  if (trimmed.length > 4000) {
+    return { error: 'Message is too long (max 4000 characters).' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  const result = await loadAgentForCall(supabase, workspaceId, agentId)
+  if (result.error !== null) return { error: result.error }
+  const { agent, provider, apiKey } = result.loaded
+
+  // Store the human's turn first, so it's part of the history the agent reads.
+  const { data: userMessage, error: userErr } = await supabase.rpc(
+    'post_agent_chat_message',
+    {
+      p_workspace_id: workspaceId,
+      p_agent_id: agentId,
+      p_role: 'user',
+      p_body: trimmed,
+    },
+  )
+  if (userErr || !userMessage) {
+    return { error: userErr?.message ?? 'Could not send your message.' }
+  }
+
+  // Build the recent private thread as context and ask the agent's LLM.
+  const userContent = await buildAgentChatContext(
+    supabase,
+    workspaceId,
+    agentId,
+    user.id,
+    agent.name,
+  )
+
+  let reply: string
+  try {
+    reply = await askAgent({
+      provider: provider.id,
+      apiKey,
+      model: agent.model,
+      system: agent.system_prompt,
+      userContent,
+    })
+  } catch (e) {
+    // The human's turn is already saved, so they can just send again.
+    return {
+      error: e instanceof Error ? e.message : 'The agent could not reply.',
+      userMessage: userMessage as AgentChatMessage,
+    }
+  }
+
+  const { data: agentMessage, error: agentErr } = await supabase.rpc(
+    'post_agent_chat_message',
+    {
+      p_workspace_id: workspaceId,
+      p_agent_id: agentId,
+      p_role: 'agent',
+      p_body: reply.slice(0, 100000),
+    },
+  )
+  if (agentErr || !agentMessage) {
+    return {
+      error: agentErr?.message ?? 'The agent replied, but it couldn’t be saved.',
+      userMessage: userMessage as AgentChatMessage,
+    }
+  }
+
+  return {
+    error: null,
+    userMessage: userMessage as AgentChatMessage,
+    agentMessage: agentMessage as AgentChatMessage,
+  }
+}
+
+// Summarise the whole 1-on-1 session and post that summary into the SHARED feed
+// as an `agent_summary`, so the rest of the team gets context on the deep work.
+export async function summarizeSessionAction(
+  workspaceId: string,
+  agentId: string,
+): Promise<MentionResult> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  const result = await loadAgentForCall(supabase, workspaceId, agentId)
+  if (result.error !== null) return { error: result.error }
+  const { agent, provider, apiKey } = result.loaded
+
+  // Pull this thread's history (RLS limits it to the caller's own messages).
+  const { data: rows } = await supabase
+    .from('agent_chat_messages')
+    .select('role, body')
+    .eq('agent_id', agentId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+    .limit(200)
+
+  const history = (rows ?? []) as { role: 'user' | 'agent'; body: string }[]
+  if (history.length === 0) {
+    return {
+      error: 'There’s nothing to summarise yet — chat with the agent first.',
+    }
+  }
+
+  const transcript = history
+    .map((m) => `[${m.role === 'user' ? 'Teammate' : agent.name}]: ${m.body}`)
+    .join('\n')
+
+  const userContent = [
+    `You (${agent.name}) just finished a private 1-on-1 work session with a teammate. Here is the full session (oldest to newest):`,
+    '',
+    transcript,
+    '',
+    'Write a short, skimmable summary to post into the shared team feed so everyone has context on what was done. Lead with the outcome, then a few bullet points of the concrete work, decisions, or next steps. Keep it tight — capture the useful result, not the back-and-forth. Reply with only the summary text.',
+  ].join('\n')
+
+  let summary: string
+  try {
+    summary = await askAgent({
+      provider: provider.id,
+      apiKey,
+      model: agent.model,
+      system: agent.system_prompt,
+      userContent,
+    })
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : 'Could not write the summary.',
+    }
+  }
+
+  const { data: posted, error: postError } = await supabase.rpc(
+    'post_agent_message',
+    {
+      p_workspace_id: workspaceId,
+      p_agent_id: agentId,
+      p_body: summary.slice(0, 100000),
+      p_type: 'agent_summary',
+    },
+  )
+  if (postError || !posted) {
+    return {
+      error: postError?.message ?? 'The summary was written but couldn’t be posted.',
+    }
+  }
+
+  // So the summary is already there when the user returns to the feed.
+  revalidatePath(`/workspaces/${workspaceId}`)
+  return { error: null, message: posted as ChatMessage }
+}
+
+// Loads the recent private 1-on-1 thread and formats it as a labelled transcript
+// for the agent, then appends the reply instruction. Names are fixed server-side
+// ('Teammate' for the human, the agent's name for its own past turns).
+async function buildAgentChatContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  agentId: string,
+  userId: string,
+  agentName: string,
+): Promise<string> {
+  const { data: rows } = await supabase
+    .from('agent_chat_messages')
+    .select('role, body, created_at')
+    .eq('workspace_id', workspaceId)
+    .eq('agent_id', agentId)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(AGENT_CHAT_HISTORY_LIMIT)
+
+  // Newest-first from the query; reverse to oldest-first for a natural read.
+  const history = ((rows ?? []) as { role: 'user' | 'agent'; body: string }[])
+    .slice()
+    .reverse()
+
+  const lines = history.map(
+    (m) => `[${m.role === 'user' ? 'Teammate' : agentName}]: ${m.body}`,
+  )
+
+  return [
+    `You (${agentName}) are in a PRIVATE 1-on-1 work session with a teammate — just the two of you, not the shared team feed. This is the place for deep, focused work.`,
+    '',
+    'Your conversation so far (oldest to newest):',
+    lines.join('\n'),
+    '',
+    `Reply to the teammate's latest message. Do real, in-depth, genuinely useful work. Reply with only your message — do not prefix it with your name or "[${agentName}]:".`,
   ].join('\n')
 }

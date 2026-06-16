@@ -562,3 +562,98 @@ $$;
 
 grant execute on function public.get_agent_secret(uuid) to authenticated;
 grant execute on function public.post_agent_message(uuid, uuid, text, text) to authenticated;
+
+
+-- ============================================================================
+-- Milestone 4 (final) — 1-on-1 agent chats + auto-summary back to the feed
+-- (Re-running this section is safe; everything is guarded.)
+--
+-- A 1-on-1 chat is a PRIVATE deep-work thread between ONE human and ONE agent.
+-- Unlike the shared `messages` feed, these rows are visible only to the human
+-- who owns them (user_id) — each teammate has their own separate thread with the
+-- same agent. When the human is done, an agent-written SUMMARY of the session is
+-- posted back into the shared feed as an `agent_summary` message (reusing the
+-- post_agent_message function from section 18) so the whole team gets context.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 19. agent_chat_messages — the private 1-on-1 threads.
+--     One row per turn. `role` says who spoke ('user' = the human teammate,
+--     'agent' = the AI). `user_id` is the OWNER of the thread.
+-- ----------------------------------------------------------------------------
+create table if not exists public.agent_chat_messages (
+  id           uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  agent_id     uuid not null references public.agents(id)     on delete cascade,
+  user_id      uuid not null references public.profiles(id)   on delete cascade,
+  role         text not null check (role in ('user','agent')),
+  body         text not null check (char_length(trim(body)) between 1 and 100000),
+  created_at   timestamptz not null default now()
+);
+
+-- Fast "give me this one thread in order" lookups.
+create index if not exists agent_chat_messages_thread_idx
+  on public.agent_chat_messages (workspace_id, agent_id, user_id, created_at);
+
+-- ----------------------------------------------------------------------------
+-- 20. Row Level Security: you can READ only your OWN 1-on-1 messages, and only
+--     in a workspace you belong to. As elsewhere there is NO insert policy —
+--     the write goes through post_agent_chat_message() below.
+-- ----------------------------------------------------------------------------
+alter table public.agent_chat_messages enable row level security;
+
+drop policy if exists "read own agent chat messages" on public.agent_chat_messages;
+create policy "read own agent chat messages"
+  on public.agent_chat_messages for select
+  to authenticated
+  using ( user_id = auth.uid() and public.is_workspace_member(workspace_id) );
+
+-- ----------------------------------------------------------------------------
+-- 21. post_agent_chat_message — append one turn to the caller's private thread.
+--     The caller must be a member, the agent must belong to the workspace, and
+--     the row is ALWAYS owned by the caller (user_id = auth.uid()), so one
+--     teammate can never write into another teammate's private thread.
+-- ----------------------------------------------------------------------------
+create or replace function public.post_agent_chat_message(
+  p_workspace_id uuid,
+  p_agent_id     uuid,
+  p_role         text,
+  p_body         text
+)
+returns public.agent_chat_messages
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+  v_ws   uuid;
+  v_row  public.agent_chat_messages;
+begin
+  if v_user is null then
+    raise exception 'You must be signed in.';
+  end if;
+  if not public.is_workspace_member(p_workspace_id) then
+    raise exception 'You are not a member of this workspace.';
+  end if;
+  select workspace_id into v_ws from public.agents where id = p_agent_id;
+  if v_ws is null or v_ws <> p_workspace_id then
+    raise exception 'That agent does not belong to this workspace.';
+  end if;
+  if p_role not in ('user','agent') then
+    raise exception 'Invalid message role.';
+  end if;
+  if p_body is null or char_length(trim(p_body)) = 0 then
+    raise exception 'Message cannot be empty.';
+  end if;
+
+  insert into public.agent_chat_messages (workspace_id, agent_id, user_id, role, body)
+  values (p_workspace_id, p_agent_id, v_user, p_role, trim(p_body))
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+grant execute on function
+  public.post_agent_chat_message(uuid, uuid, text, text) to authenticated;
