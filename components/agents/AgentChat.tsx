@@ -7,6 +7,7 @@ import {
   type AgentChatMessage,
 } from '@/app/actions/agents'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
 
 type Props = {
   workspaceId: string
@@ -111,12 +112,12 @@ export default function AgentChat({
   }
 
   return (
-    <div className="flex h-[32rem] flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="flex min-h-0 flex-1 flex-col bg-zinc-950">
       {/* Top bar: the "wrap up & share" action lives here. */}
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-200 p-3 dark:border-zinc-800">
-        <span className="text-xs text-zinc-400">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+        <span className="text-xs text-zinc-500">
           {messages.length === 0
-            ? 'Start a private session'
+            ? 'Private session — only you can see this'
             : `${messages.length} message${messages.length === 1 ? '' : 's'} in this session`}
         </span>
         <Button
@@ -130,59 +131,63 @@ export default function AgentChat({
       </div>
 
       {summaryPosted && (
-        <p className="border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+        <p className="border-b border-emerald-500/20 bg-emerald-500/10 px-5 py-2 text-xs text-emerald-400">
           ✓ Summary posted to the team feed. Your teammates can see it now.
         </p>
       )}
 
       {/* Message list (scrolls) */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
         {messages.length === 0 && (
-          <p className="py-10 text-center text-sm text-zinc-400">
+          <p className="py-16 text-center text-sm text-zinc-500">
             Just you and {agentName}. Ask it to dig into something.
           </p>
         )}
 
         {messages.map((m) => {
           const isMine = m.role === 'user'
+
+          if (isMine) {
+            return (
+              <div key={m.id} className="flex justify-end">
+                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-[#1b2b40] px-3.5 py-2 text-sm text-zinc-50">
+                  <p className="break-words whitespace-pre-wrap">{m.body}</p>
+                  <div className="mt-1 text-right text-[10px] text-zinc-400">
+                    {formatTime(m.created_at)}
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
           return (
-            <div
-              key={m.id}
-              className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-            >
-              <span className="mb-0.5 flex items-center gap-1 px-1 text-xs text-zinc-400">
-                {isMine ? 'You' : agentName}
-                {!isMine && (
-                  <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
+            <div key={m.id} className="flex items-end gap-2.5">
+              <Avatar name={agentName} kind="agent" size="sm" />
+              <div className="max-w-[75%] rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-100">
+                <div className="mb-0.5 flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-zinc-200">
+                    {agentName}
+                  </span>
+                  <span className="rounded bg-zinc-700 px-1 text-[9px] font-medium text-zinc-300">
                     AI
                   </span>
-                )}
-                <span className="text-zinc-300 dark:text-zinc-600">
+                </div>
+                <p className="break-words whitespace-pre-wrap">{m.body}</p>
+                <div className="mt-1 text-right text-[10px] text-zinc-500">
                   {formatTime(m.created_at)}
-                </span>
-              </span>
-              <div
-                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-                  isMine
-                    ? 'bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900'
-                    : 'border border-indigo-200 bg-indigo-50 text-zinc-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-zinc-100'
-                }`}
-              >
-                {m.body}
+                </div>
               </div>
             </div>
           )
         })}
 
         {thinking && (
-          <div className="flex flex-col items-start">
-            <span className="mb-0.5 flex items-center gap-1 px-1 text-xs text-zinc-400">
-              {agentName}
-              <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
-                AI
+          <div className="flex items-end gap-2.5">
+            <Avatar name={agentName} kind="agent" size="sm" />
+            <div className="rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-400">
+              <span className="mb-0.5 block text-xs font-semibold text-zinc-300">
+                {agentName}
               </span>
-            </span>
-            <div className="max-w-[80%] rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-zinc-500 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-zinc-400">
               <span className="inline-flex items-center gap-1">
                 thinking
                 <span className="animate-pulse">…</span>
@@ -195,26 +200,22 @@ export default function AgentChat({
       </div>
 
       {/* Composer */}
-      <form
-        onSubmit={handleSend}
-        className="border-t border-zinc-200 p-3 dark:border-zinc-800"
-      >
-        {error && <p className="mb-2 px-1 text-xs text-red-500">{error}</p>}
-
-        <div className="flex items-end gap-2">
+      <form onSubmit={handleSend} className="border-t border-white/10 px-5 py-4">
+        {error && <p className="mb-2 px-1 text-xs text-red-400">{error}</p>}
+        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 focus-within:border-white/20">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder={`Ask ${agentName} to work on something…`}
-            className="flex-1 resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            className="max-h-40 flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
           />
-          <Button type="submit" disabled={sending || !draft.trim()}>
+          <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
             {sending ? 'Sending…' : 'Send'}
           </Button>
         </div>
       </form>
-    </div>
+    </section>
   )
 }

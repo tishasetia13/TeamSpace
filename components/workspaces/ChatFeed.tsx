@@ -5,17 +5,25 @@ import { createClient } from '@/lib/supabase/client'
 import { sendMessageAction, type ChatMessage } from '@/app/actions/messages'
 import { mentionAgentAction } from '@/app/actions/agents'
 import { Button } from '@/components/ui/button'
+import { Avatar } from '@/components/ui/avatar'
+import { Modal } from '@/components/ui/modal'
+import InviteLink from '@/components/workspaces/InviteLink'
+import { nameColor } from '@/lib/ui/colors'
 
 type AgentRef = { id: string; name: string }
 
 type Props = {
   workspaceId: string
+  workspaceName: string
   currentUserId: string
   initialMessages: ChatMessage[]
   // user_id -> display name, so we can label messages without re-querying.
   memberNames: Record<string, string>
   // The workspace's agents, for @mention detection and labelling agent replies.
   agents: AgentRef[]
+  inviteToken: string
+  peopleCount: number
+  agentCount: number
 }
 
 // Escapes characters that have special meaning in a regular expression, so an
@@ -26,10 +34,14 @@ function escapeRegExp(s: string) {
 
 export default function ChatFeed({
   workspaceId,
+  workspaceName,
   currentUserId,
   initialMessages,
   memberNames,
   agents,
+  inviteToken,
+  peopleCount,
+  agentCount,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [draft, setDraft] = useState('')
@@ -37,6 +49,7 @@ export default function ChatFeed({
   const [error, setError] = useState<string | null>(null)
   // When set, an agent is currently "thinking" — we show a placeholder bubble.
   const [thinkingAgent, setThinkingAgent] = useState<string | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   // agent_id -> name, derived from the agents list.
@@ -145,17 +158,8 @@ export default function ChatFeed({
     }
   }
 
-  // Clicking an agent chip drops "@Name " into the composer.
-  function insertMention(name: string) {
-    setDraft((d) => {
-      const sep = d.length === 0 || d.endsWith(' ') ? '' : ' '
-      return `${d}${sep}@${name} `
-    })
-  }
-
   function authorLabel(m: ChatMessage) {
     if (m.agent_id) return agentNames[m.agent_id] ?? 'Agent'
-    if (m.user_id === currentUserId) return 'You'
     if (m.user_id) return memberNames[m.user_id] ?? 'Someone'
     return 'System'
   }
@@ -172,11 +176,27 @@ export default function ChatFeed({
   }
 
   return (
-    <div className="flex h-[28rem] flex-col rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <section className="flex min-w-0 flex-1 flex-col bg-zinc-950">
+      {/* Header */}
+      <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold text-zinc-100">
+            Team feed
+          </h1>
+          <p className="text-xs text-zinc-500">
+            {peopleCount} {peopleCount === 1 ? 'person' : 'people'} ·{' '}
+            {agentCount} {agentCount === 1 ? 'agent' : 'agents'}
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setInviteOpen(true)}>
+          Invite
+        </Button>
+      </header>
+
       {/* Message list (scrolls) */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
         {messages.length === 0 && (
-          <p className="py-10 text-center text-sm text-zinc-400">
+          <p className="py-16 text-center text-sm text-zinc-500">
             No messages yet — say hi to your team.
           </p>
         )}
@@ -185,10 +205,7 @@ export default function ChatFeed({
           // Activity events render as a centered system line.
           if (m.type === 'activity') {
             return (
-              <p
-                key={m.id}
-                className="text-center text-xs text-zinc-400 dark:text-zinc-500"
-              >
+              <p key={m.id} className="text-center text-xs text-zinc-600">
                 {m.body}
               </p>
             )
@@ -196,38 +213,47 @@ export default function ChatFeed({
 
           const isAgent = !!m.agent_id
           const isMine = !isAgent && m.user_id === currentUserId
+          const label = authorLabel(m)
+          const colorKey = isAgent ? m.agent_id! : (m.user_id ?? 'system')
 
+          // Your own messages: right-aligned navy bubble, no avatar.
+          if (isMine) {
+            return (
+              <div key={m.id} className="flex justify-end">
+                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-[#1b2b40] px-3.5 py-2 text-sm text-zinc-50">
+                  <p className="break-words whitespace-pre-wrap">{m.body}</p>
+                  <div className="mt-1 text-right text-[10px] text-zinc-400">
+                    {formatTime(m.created_at)}
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          // Everyone else (humans + agents): left-aligned, avatar + gray bubble.
           return (
-            <div
-              key={m.id}
-              className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-            >
-              <span className="mb-0.5 flex items-center gap-1 px-1 text-xs text-zinc-400">
-                {isMine ? 'You' : authorLabel(m)}
-                {isAgent && (
-                  <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
-                    AI
+            <div key={m.id} className="flex items-end gap-2.5">
+              <Avatar name={label} kind={isAgent ? 'agent' : 'person'} size="sm" />
+              <div className="max-w-[75%] rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-100">
+                <div className="mb-0.5 flex items-center gap-1.5">
+                  <span className={`text-xs font-semibold ${nameColor(colorKey)}`}>
+                    {label}
                   </span>
-                )}
-                {m.type === 'agent_summary' && (
-                  <span className="rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                    Summary from 1-on-1
-                  </span>
-                )}
-                <span className="text-zinc-300 dark:text-zinc-600">
+                  {isAgent && (
+                    <span className="rounded bg-zinc-700 px-1 text-[9px] font-medium text-zinc-300">
+                      AI
+                    </span>
+                  )}
+                  {m.type === 'agent_summary' && (
+                    <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-400">
+                      SUMMARY
+                    </span>
+                  )}
+                </div>
+                <p className="break-words whitespace-pre-wrap">{m.body}</p>
+                <div className="mt-1 text-right text-[10px] text-zinc-500">
                   {formatTime(m.created_at)}
-                </span>
-              </span>
-              <div
-                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-                  isMine
-                    ? 'bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900'
-                    : isAgent
-                      ? 'border border-indigo-200 bg-indigo-50 text-zinc-800 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-zinc-100'
-                      : 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100'
-                }`}
-              >
-                {m.body}
+                </div>
               </div>
             </div>
           )
@@ -235,14 +261,12 @@ export default function ChatFeed({
 
         {/* "Agent is thinking…" placeholder while we wait for the reply. */}
         {thinkingAgent && (
-          <div className="flex flex-col items-start">
-            <span className="mb-0.5 flex items-center gap-1 px-1 text-xs text-zinc-400">
-              {thinkingAgent}
-              <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
-                AI
+          <div className="flex items-end gap-2.5">
+            <Avatar name={thinkingAgent} kind="agent" size="sm" />
+            <div className="rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-400">
+              <span className="mb-0.5 block text-xs font-semibold text-zinc-300">
+                {thinkingAgent}
               </span>
-            </span>
-            <div className="max-w-[80%] rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-zinc-500 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-zinc-400">
               <span className="inline-flex items-center gap-1">
                 thinking
                 <span className="animate-pulse">…</span>
@@ -255,43 +279,33 @@ export default function ChatFeed({
       </div>
 
       {/* Composer */}
-      <form
-        onSubmit={handleSend}
-        className="border-t border-zinc-200 p-3 dark:border-zinc-800"
-      >
-        {error && <p className="mb-2 px-1 text-xs text-red-500">{error}</p>}
-
-        {/* Agent mention chips */}
-        {agents.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-zinc-400">Mention an agent:</span>
-            {agents.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => insertMention(a.name)}
-                className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300"
-              >
-                @{a.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-end gap-2">
+      <form onSubmit={handleSend} className="border-t border-white/10 px-5 py-4">
+        {error && <p className="mb-2 px-1 text-xs text-red-400">{error}</p>}
+        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 focus-within:border-white/20">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="Message your team… (@mention an agent to ask it)"
-            className="flex-1 resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            placeholder="Message the team — use @ to bring in an agent"
+            className="max-h-40 flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
           />
-          <Button type="submit" disabled={sending || !draft.trim()}>
+          <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
             {sending ? 'Sending…' : 'Send'}
           </Button>
         </div>
       </form>
-    </div>
+
+      <Modal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        title={`Invite to ${workspaceName}`}
+      >
+        <p className="mb-3 text-xs text-zinc-400">
+          Anyone with this link can join {workspaceName}.
+        </p>
+        <InviteLink token={inviteToken} />
+      </Modal>
+    </section>
   )
 }

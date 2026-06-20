@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AgentChat from '@/components/agents/AgentChat'
+import { Avatar } from '@/components/ui/avatar'
 import { getProvider } from '@/lib/agents/providers'
 import type { AgentChatMessage } from '@/app/actions/agents'
 
@@ -59,40 +60,40 @@ export default async function AgentChatPage({
   const provider = getProvider(agent.provider)
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4">
-      <div className="mx-auto w-full max-w-2xl space-y-6 py-10">
+    <div className="flex h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100">
+      <header className="flex items-center gap-3 border-b border-white/10 px-5 py-3">
         <Link
           href={`/workspaces/${id}`}
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="text-sm text-zinc-500 hover:text-zinc-200"
+          title={`Back to ${workspace.name}`}
         >
-          ← Back to {workspace.name}
+          ←
         </Link>
-
-        <div>
+        <Avatar name={agent.name} kind="agent" size="md" status />
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            <h1 className="truncate text-sm font-semibold text-zinc-100">
               {agent.name}
             </h1>
-            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">
+            <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300">
               AI
             </span>
-            <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+            <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-zinc-400">
               {provider?.label ?? agent.provider}
             </span>
           </div>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Private 1-on-1 session — only you can see this. Wrap up to share a
-            summary with the team.
+          <p className="text-xs text-zinc-500">
+            Private 1-on-1 · wrap up to share a summary with the team
           </p>
         </div>
+      </header>
 
-        <AgentChat
-          workspaceId={id}
-          agentId={agent.id}
-          agentName={agent.name}
-          initialMessages={initialMessages}
-        />
-      </div>
+      <AgentChat
+        workspaceId={id}
+        agentId={agent.id}
+        agentName={agent.name}
+        initialMessages={initialMessages}
+      />
     </div>
   )
 }

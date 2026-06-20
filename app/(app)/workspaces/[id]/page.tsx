@@ -1,9 +1,7 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import InviteLink from '@/components/workspaces/InviteLink'
 import ChatFeed from '@/components/workspaces/ChatFeed'
-import AgentsPanel from '@/components/agents/AgentsPanel'
+import WorkspaceSidebar from '@/components/workspaces/WorkspaceSidebar'
 import type { ChatMessage } from '@/app/actions/messages'
 import type { Agent } from '@/app/actions/agents'
 
@@ -78,74 +76,37 @@ export default async function WorkspacePage({
 
   const agents = (agentData ?? []) as Agent[]
 
+  // Shape the sidebar's people list, and find the current user's own name/role.
+  const people = members.map((m) => ({
+    id: m.user_id,
+    name: m.profiles?.display_name || m.profiles?.email || 'Unknown user',
+    role: m.role,
+    isYou: m.user_id === user.id,
+  }))
+  const me = people.find((p) => p.isYou)
+
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-4">
-      <div className="mx-auto w-full max-w-2xl space-y-6 py-10">
-        <Link
-          href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
-        >
-          ← All workspaces
-        </Link>
+    <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <WorkspaceSidebar
+        workspaceId={workspace.id}
+        workspaceName={workspace.name}
+        agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+        people={people}
+        currentUserName={me?.name ?? user.email ?? 'You'}
+        currentUserRole={me?.role ?? 'member'}
+      />
 
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            {workspace.name}
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {members.length} {members.length === 1 ? 'member' : 'members'}
-          </p>
-        </div>
-
-        <ChatFeed
-          workspaceId={workspace.id}
-          currentUserId={user.id}
-          initialMessages={initialMessages}
-          memberNames={memberNames}
-          agents={agents.map((a) => ({ id: a.id, name: a.name }))}
-        />
-
-        <AgentsPanel workspaceId={workspace.id} agents={agents} />
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Invite link
-          </h2>
-          <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-            Anyone with this link can join {workspace.name}.
-          </p>
-          <InviteLink token={workspace.invite_token} />
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Members
-          </h2>
-          <ul className="space-y-2">
-            {members.map((m) => {
-              const name =
-                m.profiles?.display_name || m.profiles?.email || 'Unknown user'
-              const isYou = m.user_id === user.id
-              return (
-                <li
-                  key={m.user_id}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-zinc-800 dark:text-zinc-200">
-                    {name}
-                    {isYou && (
-                      <span className="ml-1 text-zinc-400">(you)</span>
-                    )}
-                  </span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                    {m.role}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      </div>
+      <ChatFeed
+        workspaceId={workspace.id}
+        workspaceName={workspace.name}
+        currentUserId={user.id}
+        initialMessages={initialMessages}
+        memberNames={memberNames}
+        agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+        inviteToken={workspace.invite_token}
+        peopleCount={members.length}
+        agentCount={agents.length}
+      />
     </div>
   )
 }
