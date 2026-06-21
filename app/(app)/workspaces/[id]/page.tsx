@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import ChatFeed from '@/components/workspaces/ChatFeed'
 import WorkspaceSidebar from '@/components/workspaces/WorkspaceSidebar'
+import { RELAY } from '@/lib/ui/relay'
 import type { ChatMessage } from '@/app/actions/messages'
 import type { Agent } from '@/app/actions/agents'
 
@@ -86,7 +87,10 @@ export default async function WorkspacePage({
   const me = people.find((p) => p.isYou)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ background: RELAY.bg, color: RELAY.text }}
+    >
       <WorkspaceSidebar
         workspaceId={workspace.id}
         workspaceName={workspace.name}
@@ -94,6 +98,7 @@ export default async function WorkspacePage({
         people={people}
         currentUserName={me?.name ?? user.email ?? 'You'}
         currentUserRole={me?.role ?? 'member'}
+        inviteToken={workspace.invite_token}
       />
 
       <ChatFeed

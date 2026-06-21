@@ -1,16 +1,19 @@
 'use client'
 
 import { useEffect } from 'react'
+import { RELAY, FONT } from '@/lib/ui/relay'
 
 type Props = {
   open: boolean
   onClose: () => void
   title?: string
+  description?: string
   children: React.ReactNode
 }
 
-// A minimal centered dialog: dimmed backdrop (click to close), Esc to close.
-export function Modal({ open, onClose, title, children }: Props) {
+// A minimal centered dialog in the navy "Relay" style: dimmed/blurred backdrop
+// (click to close), Esc to close.
+export function Modal({ open, onClose, title, description, children }: Props) {
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -23,24 +26,53 @@ export function Modal({ open, onClose, title, children }: Props) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: 'rgba(5,5,7,0.66)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+        fontFamily: FONT,
+      }}
+    >
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 480,
+          maxWidth: '100%',
+          maxHeight: '88vh',
+          overflowY: 'auto',
+          background: RELAY.panel,
+          border: `1px solid ${RELAY.border2}`,
+          borderRadius: 16,
+          padding: 24,
+          color: RELAY.text,
+          boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
+        }}
+      >
         {title && (
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: description ? 4 : 16 }}>
+            <div style={{ fontSize: 17, fontWeight: 600, color: RELAY.text }}>{title}</div>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="-mr-1 flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white/5 hover:text-zinc-200"
+              className="rl-faint"
+              style={{ cursor: 'pointer', color: RELAY.text2, fontSize: 20, lineHeight: 1, background: 'transparent', border: 'none' }}
             >
-              ✕
+              ×
             </button>
           </div>
+        )}
+        {description && (
+          <div style={{ fontSize: 13, color: RELAY.text2, marginBottom: 20 }}>{description}</div>
         )}
         {children}
       </div>

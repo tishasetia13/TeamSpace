@@ -4,11 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessageAction, type ChatMessage } from '@/app/actions/messages'
 import { mentionAgentAction } from '@/app/actions/agents'
-import { Button } from '@/components/ui/button'
-import { Avatar } from '@/components/ui/avatar'
-import { Modal } from '@/components/ui/modal'
-import InviteLink from '@/components/workspaces/InviteLink'
-import { nameColor } from '@/lib/ui/colors'
+import { RELAY, FONT, fmtClock, letter } from '@/lib/ui/relay'
 
 type AgentRef = { id: string; name: string }
 
@@ -17,68 +13,46 @@ type Props = {
   workspaceName: string
   currentUserId: string
   initialMessages: ChatMessage[]
-  // user_id -> display name, so we can label messages without re-querying.
   memberNames: Record<string, string>
-  // The workspace's agents, for @mention detection and labelling agent replies.
   agents: AgentRef[]
   inviteToken: string
   peopleCount: number
   agentCount: number
 }
 
-// Escapes characters that have special meaning in a regular expression, so an
-// agent named e.g. "C++ Helper" still matches literally.
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export default function ChatFeed({
   workspaceId,
-  workspaceName,
   currentUserId,
   initialMessages,
   memberNames,
   agents,
-  inviteToken,
-  peopleCount,
-  agentCount,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // When set, an agent is currently "thinking" — we show a placeholder bubble.
   const [thinkingAgent, setThinkingAgent] = useState<string | null>(null)
-  const [inviteOpen, setInviteOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // agent_id -> name, derived from the agents list.
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {}
     for (const a of agents) map[a.id] = a.name
     return map
   }, [agents])
 
-  // Add a message to the list, but never the same one twice. We dedupe by id
-  // because a message can show up two ways: the server action returns it
-  // immediately AND Realtime echoes it back to us a moment later.
   function addMessage(msg: ChatMessage) {
-    setMessages((prev) =>
-      prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
-    )
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
   }
 
   useEffect(() => {
     const supabase = createClient()
     let active = true
 
-    // Unique channel name per mount (see the long note that used to live here):
-    // supabase.channel() reuses an existing channel by name, and teardown is
-    // async, so a fixed name can hand a remount an already-subscribed channel.
-    const channel = supabase.channel(
-      `messages:${workspaceId}:${crypto.randomUUID()}`,
-    )
-
+    const channel = supabase.channel(`messages:${workspaceId}:${crypto.randomUUID()}`)
     channel.on(
       'postgres_changes',
       {
@@ -95,9 +69,7 @@ export default function ChatFeed({
         data: { session },
       } = await supabase.auth.getSession()
       if (!active) return
-      if (session) {
-        supabase.realtime.setAuth(session.access_token)
-      }
+      if (session) supabase.realtime.setAuth(session.access_token)
       channel.subscribe()
     })()
 
@@ -107,13 +79,10 @@ export default function ChatFeed({
     }
   }, [workspaceId])
 
-  // Keep the newest message (or the thinking bubble) in view.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinkingAgent])
 
-  // Returns the first agent @mentioned in the text, or null. We match "@" + the
-  // agent's name (case-insensitive). First match wins — one reply per message.
   function findMentionedAgent(text: string): AgentRef | null {
     for (const a of agents) {
       const re = new RegExp(`@${escapeRegExp(a.name)}\\b`, 'i')
@@ -137,9 +106,8 @@ export default function ChatFeed({
       return
     }
     setDraft('')
-    if (result.message) addMessage(result.message) // show it instantly
+    if (result.message) addMessage(result.message)
 
-    // If the message @mentioned an agent, ask it to reply.
     const mentioned = findMentionedAgent(body)
     if (mentioned) {
       setThinkingAgent(mentioned.name)
@@ -150,7 +118,6 @@ export default function ChatFeed({
     }
   }
 
-  // Enter sends; Shift+Enter makes a new line.
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -164,48 +131,50 @@ export default function ChatFeed({
     return 'System'
   }
 
-  // Formatted by hand (not toLocaleTimeString) so the server-rendered HTML and
-  // the browser's first render always match exactly (avoids hydration errors).
-  function formatTime(iso: string) {
-    const d = new Date(iso)
-    const hour24 = d.getHours()
-    const hour12 = hour24 % 12 || 12
-    const minutes = d.getMinutes().toString().padStart(2, '0')
-    const ampm = hour24 < 12 ? 'AM' : 'PM'
-    return `${hour12}:${minutes} ${ampm}`
-  }
+  // WhatsApp-style grouping: a message is "grouped" with the one above it when
+  // they share the same author with no activity line between them — grouped
+  // messages hide the repeated avatar + name. Computed off-render in a memo so we
+  // never mutate state during render (which this React version rejects).
+  const groupedById = useMemo(() => {
+    const out: Record<string, boolean> = {}
+    let prevKey: string | null = null
+    for (const m of messages) {
+      if (m.type === 'activity') {
+        prevKey = null
+        continue
+      }
+      const key = m.agent_id ? `a:${m.agent_id}` : `u:${m.user_id ?? 'sys'}`
+      out[m.id] = prevKey === key
+      prevKey = key
+    }
+    return out
+  }, [messages])
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-zinc-950">
-      {/* Header */}
-      <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-zinc-100">
-            Team feed
-          </h1>
-          <p className="text-xs text-zinc-500">
-            {peopleCount} {peopleCount === 1 ? 'person' : 'people'} ·{' '}
-            {agentCount} {agentCount === 1 ? 'agent' : 'agents'}
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setInviteOpen(true)}>
-          Invite
-        </Button>
-      </header>
-
-      {/* Message list (scrolls) */}
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+    <section
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: RELAY.bg,
+        fontFamily: FONT,
+        color: RELAY.text,
+        height: '100%',
+      }}
+    >
+      {/* Message list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px 8px' }}>
         {messages.length === 0 && (
-          <p className="py-16 text-center text-sm text-zinc-500">
+          <p style={{ padding: '64px 0', textAlign: 'center', fontSize: 14, color: RELAY.text3 }}>
             No messages yet — say hi to your team.
           </p>
         )}
 
         {messages.map((m) => {
-          // Activity events render as a centered system line.
           if (m.type === 'activity') {
             return (
-              <p key={m.id} className="text-center text-xs text-zinc-600">
+              <p key={m.id} style={{ textAlign: 'center', fontSize: 11, color: RELAY.text3, padding: '6px 0' }}>
                 {m.body}
               </p>
             )
@@ -214,62 +183,112 @@ export default function ChatFeed({
           const isAgent = !!m.agent_id
           const isMine = !isAgent && m.user_id === currentUserId
           const label = authorLabel(m)
-          const colorKey = isAgent ? m.agent_id! : (m.user_id ?? 'system')
+          const grouped = groupedById[m.id] ?? false
+          const isSummary = m.type === 'agent_summary'
 
-          // Your own messages: right-aligned navy bubble, no avatar.
-          if (isMine) {
-            return (
-              <div key={m.id} className="flex justify-end">
-                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-[#1b2b40] px-3.5 py-2 text-sm text-zinc-50">
-                  <p className="break-words whitespace-pre-wrap">{m.body}</p>
-                  <div className="mt-1 text-right text-[10px] text-zinc-400">
-                    {formatTime(m.created_at)}
-                  </div>
-                </div>
-              </div>
-            )
-          }
-
-          // Everyone else (humans + agents): left-aligned, avatar + gray bubble.
           return (
-            <div key={m.id} className="flex items-end gap-2.5">
-              <Avatar name={label} kind={isAgent ? 'agent' : 'person'} size="sm" />
-              <div className="max-w-[75%] rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-100">
-                <div className="mb-0.5 flex items-center gap-1.5">
-                  <span className={`text-xs font-semibold ${nameColor(colorKey)}`}>
-                    {label}
-                  </span>
-                  {isAgent && (
-                    <span className="rounded bg-zinc-700 px-1 text-[9px] font-medium text-zinc-300">
-                      AI
+            <div
+              key={m.id}
+              style={{
+                display: 'flex',
+                gap: 8,
+                padding: '1.5px 0',
+                alignItems: 'flex-end',
+                justifyContent: isMine ? 'flex-end' : 'flex-start',
+              }}
+            >
+              {!isMine &&
+                (grouped ? (
+                  <div style={{ width: 28, flex: 'none' }} />
+                ) : (
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      flex: 'none',
+                      borderRadius: isAgent ? 7 : '50%',
+                      background: isAgent ? RELAY.agent : RELAY.person,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 600,
+                      color: isAgent ? RELAY.agentText : '#fff',
+                      fontSize: 11,
+                    }}
+                  >
+                    {letter(label)}
+                  </div>
+                ))}
+
+              <div
+                style={{
+                  maxWidth: '70%',
+                  minWidth: 74,
+                  background: isMine ? RELAY.mineBg : RELAY.elev,
+                  border: `1px solid ${isMine ? RELAY.mineBorder : RELAY.border}`,
+                  borderRadius: 13,
+                  ...(isMine ? { borderTopRightRadius: 4 } : { borderTopLeftRadius: 4 }),
+                  padding: '7px 11px 5px',
+                }}
+              >
+                {!isMine && !grouped && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
+                    <span style={{ fontWeight: 600, fontSize: 12.5, color: isAgent ? RELAY.agentName : RELAY.personName }}>
+                      {label}
                     </span>
-                  )}
-                  {m.type === 'agent_summary' && (
-                    <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-medium text-emerald-400">
-                      SUMMARY
-                    </span>
-                  )}
+                    {isSummary && (
+                      <span style={{ fontSize: 9, fontWeight: 600, color: RELAY.green, background: 'rgba(111,191,154,0.14)', padding: '1px 6px', borderRadius: 20 }}>
+                        SUMMARY
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div style={{ color: RELAY.text, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14 }}>
+                  {m.body}
                 </div>
-                <p className="break-words whitespace-pre-wrap">{m.body}</p>
-                <div className="mt-1 text-right text-[10px] text-zinc-500">
-                  {formatTime(m.created_at)}
+                <div suppressHydrationWarning style={{ textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,0.32)', marginTop: 1 }}>
+                  {fmtClock(m.created_at)}
                 </div>
               </div>
             </div>
           )
         })}
 
-        {/* "Agent is thinking…" placeholder while we wait for the reply. */}
+        {/* Agent typing indicator */}
         {thinkingAgent && (
-          <div className="flex items-end gap-2.5">
-            <Avatar name={thinkingAgent} kind="agent" size="sm" />
-            <div className="rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-400">
-              <span className="mb-0.5 block text-xs font-semibold text-zinc-300">
-                {thinkingAgent}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                thinking
-                <span className="animate-pulse">…</span>
+          <div style={{ display: 'flex', gap: 12, padding: '7px 0', alignItems: 'center' }}>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                flex: 'none',
+                borderRadius: 7,
+                background: RELAY.agent,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 600,
+                color: RELAY.agentText,
+                fontSize: 11,
+              }}
+            >
+              {letter(thinkingAgent)}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 13.5 }}>{thinkingAgent}</span>
+              <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+                {[0, 0.2, 0.4].map((d) => (
+                  <span
+                    key={d}
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: '50%',
+                      background: RELAY.text2,
+                      animation: `rl-blink 1.3s infinite ${d}s`,
+                    }}
+                  />
+                ))}
               </span>
             </div>
           </div>
@@ -279,33 +298,61 @@ export default function ChatFeed({
       </div>
 
       {/* Composer */}
-      <form onSubmit={handleSend} className="border-t border-white/10 px-5 py-4">
-        {error && <p className="mb-2 px-1 text-xs text-red-400">{error}</p>}
-        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 focus-within:border-white/20">
+      <form onSubmit={handleSend} style={{ flex: 'none', padding: '10px 22px 18px' }}>
+        {error && <p style={{ margin: '0 0 8px', fontSize: 12, color: '#f0a0a0' }}>{error}</p>}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 9,
+            background: RELAY.panel,
+            border: `1px solid ${RELAY.border2}`,
+            borderRadius: 11,
+            padding: '6px 6px 6px 14px',
+          }}
+        >
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
             placeholder="Message the team — use @ to bring in an agent"
-            className="max-h-40 flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+            className="rl-area"
+            style={{
+              flex: 1,
+              maxHeight: 160,
+              resize: 'none',
+              background: 'transparent',
+              border: 'none',
+              color: RELAY.text,
+              fontSize: 14,
+              padding: '8px 0',
+              fontFamily: FONT,
+            }}
           />
-          <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
+          <button
+            type="submit"
+            disabled={sending || !draft.trim()}
+            className="rl-send"
+            style={{
+              flex: 'none',
+              background: RELAY.sendGrad,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              height: 34,
+              padding: '0 16px',
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: sending || !draft.trim() ? 'default' : 'pointer',
+              opacity: sending || !draft.trim() ? 0.6 : 1,
+              fontFamily: FONT,
+            }}
+          >
             {sending ? 'Sending…' : 'Send'}
-          </Button>
+          </button>
         </div>
       </form>
-
-      <Modal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        title={`Invite to ${workspaceName}`}
-      >
-        <p className="mb-3 text-xs text-zinc-400">
-          Anyone with this link can join {workspaceName}.
-        </p>
-        <InviteLink token={inviteToken} />
-      </Modal>
     </section>
   )
 }

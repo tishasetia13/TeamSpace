@@ -6,13 +6,14 @@ import {
   summarizeSessionAction,
   type AgentChatMessage,
 } from '@/app/actions/agents'
-import { Button } from '@/components/ui/button'
-import { Avatar } from '@/components/ui/avatar'
+import { RELAY, FONT, fmtClock, letter } from '@/lib/ui/relay'
 
 type Props = {
   workspaceId: string
   agentId: string
   agentName: string
+  agentRole?: string
+  providerLabel?: string
   initialMessages: AgentChatMessage[]
 }
 
@@ -20,28 +21,25 @@ export default function AgentChat({
   workspaceId,
   agentId,
   agentName,
+  agentRole,
+  providerLabel,
   initialMessages,
 }: Props) {
   const [messages, setMessages] = useState<AgentChatMessage[]>(initialMessages)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // True while we wait for the agent's reply (shows a "thinking…" bubble).
   const [thinking, setThinking] = useState(false)
   const [summarizing, setSummarizing] = useState(false)
-  // Set once a summary has been posted to the shared feed.
   const [summaryPosted, setSummaryPosted] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Keep the newest message (or the thinking bubble) in view.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinking])
 
   function addMessage(msg: AgentChatMessage) {
-    setMessages((prev) =>
-      prev.some((m) => m.id === msg.id) ? prev : [...prev, msg],
-    )
+    setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
   }
 
   async function handleSend(e: React.FormEvent) {
@@ -53,8 +51,6 @@ export default function AgentChat({
     setError(null)
     setSummaryPosted(false)
 
-    // Show the user's message instantly with a temporary id (there's no Realtime
-    // here — the action returns the saved rows, but this keeps it snappy).
     const optimistic: AgentChatMessage = {
       id: `temp-${crypto.randomUUID()}`,
       workspace_id: workspaceId,
@@ -73,13 +69,10 @@ export default function AgentChat({
     setThinking(false)
     setSending(false)
 
-    if (res.error) {
-      setError(res.error)
-    }
+    if (res.error) setError(res.error)
     if (res.agentMessage) addMessage(res.agentMessage)
   }
 
-  // Enter sends; Shift+Enter makes a new line.
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -92,89 +85,169 @@ export default function AgentChat({
     setSummarizing(true)
     setError(null)
     setSummaryPosted(false)
-
     const res = await summarizeSessionAction(workspaceId, agentId)
-
     setSummarizing(false)
     if (res.error) setError(res.error)
     else setSummaryPosted(true)
   }
 
-  // Formatted by hand (not toLocaleTimeString) so server and client first render
-  // match exactly (avoids hydration errors) — same approach as the shared feed.
-  function formatTime(iso: string) {
-    const d = new Date(iso)
-    const hour24 = d.getHours()
-    const hour12 = hour24 % 12 || 12
-    const minutes = d.getMinutes().toString().padStart(2, '0')
-    const ampm = hour24 < 12 ? 'AM' : 'PM'
-    return `${hour12}:${minutes} ${ampm}`
-  }
-
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-zinc-950">
-      {/* Top bar: the "wrap up & share" action lives here. */}
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
-        <span className="text-xs text-zinc-500">
-          {messages.length === 0
-            ? 'Private session — only you can see this'
-            : `${messages.length} message${messages.length === 1 ? '' : 's'} in this session`}
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
+    <section
+      style={{
+        flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        background: RELAY.bg,
+        fontFamily: FONT,
+        color: RELAY.text,
+        height: '100%',
+      }}
+    >
+      {/* Header: agent identity + wrap-up action */}
+      <header
+        style={{
+          flex: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '12px 22px',
+          borderBottom: `1px solid ${RELAY.border}`,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              flex: 'none',
+              borderRadius: 8,
+              background: RELAY.agent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 600,
+              color: RELAY.agentText,
+              fontSize: 13,
+            }}
+          >
+            {letter(agentName)}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {agentName}
+              </span>
+              <span style={{ fontSize: 9, fontWeight: 600, color: RELAY.agentText, background: RELAY.agent, padding: '1px 6px', borderRadius: 5 }}>
+                AI
+              </span>
+              {providerLabel && (
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: RELAY.accent2, background: 'rgba(119,141,169,0.16)', padding: '2px 8px', borderRadius: 20 }}>
+                  {providerLabel}
+                </span>
+              )}
+            </div>
+            <p style={{ margin: '1px 0 0', fontSize: 12, color: RELAY.text3 }}>
+              {agentRole ? `${agentRole} · ` : ''}Private 1-on-1 — wrap up to share a summary
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
           onClick={handleSummarize}
           disabled={summarizing || messages.length === 0}
+          className="rl-outline"
+          style={{
+            flex: 'none',
+            background: 'transparent',
+            border: `1px solid ${RELAY.border2}`,
+            color: RELAY.text2,
+            borderRadius: 9,
+            padding: '8px 14px',
+            fontWeight: 500,
+            fontSize: 13,
+            cursor: summarizing || messages.length === 0 ? 'default' : 'pointer',
+            opacity: summarizing || messages.length === 0 ? 0.5 : 1,
+            fontFamily: FONT,
+            whiteSpace: 'nowrap',
+          }}
         >
-          {summarizing ? 'Summarising…' : 'Wrap up & share to feed'}
-        </Button>
-      </div>
+          {summarizing ? 'Summarising…' : 'Wrap up & share'}
+        </button>
+      </header>
 
       {summaryPosted && (
-        <p className="border-b border-emerald-500/20 bg-emerald-500/10 px-5 py-2 text-xs text-emerald-400">
+        <p
+          style={{
+            margin: 0,
+            padding: '8px 22px',
+            fontSize: 12,
+            color: RELAY.green,
+            background: 'rgba(111,191,154,0.10)',
+            borderBottom: '1px solid rgba(111,191,154,0.20)',
+          }}
+        >
           ✓ Summary posted to the team feed. Your teammates can see it now.
         </p>
       )}
 
-      {/* Message list (scrolls) */}
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px 8px' }}>
         {messages.length === 0 && (
-          <p className="py-16 text-center text-sm text-zinc-500">
+          <p style={{ padding: '64px 0', textAlign: 'center', fontSize: 14, color: RELAY.text3 }}>
             Just you and {agentName}. Ask it to dig into something.
           </p>
         )}
 
         {messages.map((m) => {
           const isMine = m.role === 'user'
-
-          if (isMine) {
-            return (
-              <div key={m.id} className="flex justify-end">
-                <div className="max-w-[75%] rounded-2xl rounded-br-md bg-[#1b2b40] px-3.5 py-2 text-sm text-zinc-50">
-                  <p className="break-words whitespace-pre-wrap">{m.body}</p>
-                  <div className="mt-1 text-right text-[10px] text-zinc-400">
-                    {formatTime(m.created_at)}
-                  </div>
-                </div>
-              </div>
-            )
-          }
-
           return (
-            <div key={m.id} className="flex items-end gap-2.5">
-              <Avatar name={agentName} kind="agent" size="sm" />
-              <div className="max-w-[75%] rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-100">
-                <div className="mb-0.5 flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-zinc-200">
-                    {agentName}
-                  </span>
-                  <span className="rounded bg-zinc-700 px-1 text-[9px] font-medium text-zinc-300">
-                    AI
-                  </span>
+            <div
+              key={m.id}
+              style={{
+                display: 'flex',
+                gap: 8,
+                padding: '1.5px 0',
+                alignItems: 'flex-end',
+                justifyContent: isMine ? 'flex-end' : 'flex-start',
+              }}
+            >
+              {!isMine && (
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    flex: 'none',
+                    borderRadius: 7,
+                    background: RELAY.agent,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    color: RELAY.agentText,
+                    fontSize: 11,
+                  }}
+                >
+                  {letter(agentName)}
                 </div>
-                <p className="break-words whitespace-pre-wrap">{m.body}</p>
-                <div className="mt-1 text-right text-[10px] text-zinc-500">
-                  {formatTime(m.created_at)}
+              )}
+              <div
+                style={{
+                  maxWidth: '70%',
+                  minWidth: 74,
+                  background: isMine ? RELAY.mineBg : RELAY.elev,
+                  border: `1px solid ${isMine ? RELAY.mineBorder : RELAY.border}`,
+                  borderRadius: 13,
+                  ...(isMine ? { borderTopRightRadius: 4 } : { borderTopLeftRadius: 4 }),
+                  padding: '7px 11px 5px',
+                }}
+              >
+                <div style={{ color: RELAY.text, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14 }}>
+                  {m.body}
+                </div>
+                <div suppressHydrationWarning style={{ textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,0.32)', marginTop: 1 }}>
+                  {fmtClock(m.created_at)}
                 </div>
               </div>
             </div>
@@ -182,15 +255,30 @@ export default function AgentChat({
         })}
 
         {thinking && (
-          <div className="flex items-end gap-2.5">
-            <Avatar name={agentName} kind="agent" size="sm" />
-            <div className="rounded-2xl rounded-bl-md bg-zinc-800/70 px-3.5 py-2 text-sm text-zinc-400">
-              <span className="mb-0.5 block text-xs font-semibold text-zinc-300">
-                {agentName}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                thinking
-                <span className="animate-pulse">…</span>
+          <div style={{ display: 'flex', gap: 12, padding: '7px 0', alignItems: 'center' }}>
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                flex: 'none',
+                borderRadius: 7,
+                background: RELAY.agent,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 600,
+                color: RELAY.agentText,
+                fontSize: 11,
+              }}
+            >
+              {letter(agentName)}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 13.5 }}>{agentName}</span>
+              <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}>
+                {[0, 0.2, 0.4].map((d) => (
+                  <span key={d} style={{ width: 5, height: 5, borderRadius: '50%', background: RELAY.text2, animation: `rl-blink 1.3s infinite ${d}s` }} />
+                ))}
               </span>
             </div>
           </div>
@@ -200,20 +288,59 @@ export default function AgentChat({
       </div>
 
       {/* Composer */}
-      <form onSubmit={handleSend} className="border-t border-white/10 px-5 py-4">
-        {error && <p className="mb-2 px-1 text-xs text-red-400">{error}</p>}
-        <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 focus-within:border-white/20">
+      <form onSubmit={handleSend} style={{ flex: 'none', padding: '10px 22px 18px' }}>
+        {error && <p style={{ margin: '0 0 8px', fontSize: 12, color: '#f0a0a0' }}>{error}</p>}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 9,
+            background: RELAY.panel,
+            border: `1px solid ${RELAY.border2}`,
+            borderRadius: 11,
+            padding: '6px 6px 6px 14px',
+          }}
+        >
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            placeholder={`Ask ${agentName} to work on something…`}
-            className="max-h-40 flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+            placeholder={`Message ${agentName}…`}
+            className="rl-area"
+            style={{
+              flex: 1,
+              maxHeight: 160,
+              resize: 'none',
+              background: 'transparent',
+              border: 'none',
+              color: RELAY.text,
+              fontSize: 14,
+              padding: '8px 0',
+              fontFamily: FONT,
+            }}
           />
-          <Button type="submit" size="sm" disabled={sending || !draft.trim()}>
+          <button
+            type="submit"
+            disabled={sending || !draft.trim()}
+            className="rl-send"
+            style={{
+              flex: 'none',
+              background: RELAY.sendGrad,
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              height: 34,
+              padding: '0 16px',
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: sending || !draft.trim() ? 'default' : 'pointer',
+              opacity: sending || !draft.trim() ? 0.6 : 1,
+              fontFamily: FONT,
+            }}
+          >
             {sending ? 'Sending…' : 'Send'}
-          </Button>
+          </button>
         </div>
       </form>
     </section>

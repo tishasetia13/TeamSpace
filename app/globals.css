@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-jetbrains);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -128,3 +128,46 @@
     @apply font-sans;
   }
 }
+
+/* =====================================================================
+   Relay navy design system — shared helpers used by the workspace shell,
+   chat, and modals. Static styling is set inline on each element; these
+   classes only cover hover/focus states, the typing animation, and the
+   scrollbar, which can't be expressed inline.
+   ===================================================================== */
+@keyframes rl-blink {
+  0%, 80%, 100% { opacity: 0.18; }
+  40% { opacity: 0.9; }
+}
+
+/* sidebar / list rows */
+.rl-row { transition: background 0.12s; }
+.rl-row:hover { background: rgba(119, 141, 169, 0.07); }
+.rl-row .rl-del { opacity: 0; transition: opacity 0.12s, color 0.12s; }
+.rl-row:hover .rl-del { opacity: 1; }
+.rl-del:hover { color: #f0a0a0 !important; }
+
+/* faint text that brightens on hover (e.g. the "+" actions) */
+.rl-faint { transition: color 0.12s; }
+.rl-faint:hover { color: #E0E1DD !important; }
+
+/* gradient send / primary buttons */
+.rl-send { transition: opacity 0.12s; }
+.rl-send:hover { opacity: 0.9; }
+
+/* white primary button (modals) */
+.rl-white { transition: opacity 0.12s; }
+.rl-white:hover { opacity: 0.88; }
+
+/* inputs + textareas */
+.rl-input, .rl-area { transition: border-color 0.12s; }
+.rl-input::placeholder, .rl-area::placeholder { color: #5d738c; }
+.rl-input:focus, .rl-area:focus { border-color: rgba(119, 141, 169, 0.30); }
+
+/* cards (workspace tiles, etc.) */
+.rl-card { transition: border-color 0.15s, transform 0.15s; }
+.rl-card:hover { border-color: rgba(119, 141, 169, 0.30); }
+
+/* outline/ghost buttons whose border + text brighten on hover */
+.rl-outline { transition: color 0.12s, border-color 0.12s, background 0.12s; }
+.rl-outline:hover { color: #E0E1DD; border-color: rgba(119, 141, 169, 0.30); }
