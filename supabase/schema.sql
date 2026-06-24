@@ -227,6 +227,103 @@ grant execute on function public.workspace_preview(uuid)        to authenticated
 grant execute on function public.join_workspace_by_token(uuid)  to authenticated;
 
 
+-- ----------------------------------------------------------------------------
+-- Workspace management (rename / delete / leave).
+-- Same design as everywhere else: the tables have no direct write access, so
+-- these SECURITY DEFINER functions are the ONLY way to change a workspace, and
+-- they enforce the "who is allowed to do this" rules themselves.
+-- ----------------------------------------------------------------------------
+
+-- Is the current user the OWNER of this workspace? (creator = owner role.)
+create or replace function public.is_workspace_owner(p_workspace_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.workspace_members
+    where workspace_id = p_workspace_id
+      and user_id = auth.uid()
+      and role = 'owner'
+  );
+$$;
+
+-- Rename a workspace. Owner only.
+create or replace function public.rename_workspace(p_workspace_id uuid, p_name text)
+returns public.workspaces
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ws public.workspaces;
+begin
+  if not public.is_workspace_owner(p_workspace_id) then
+    raise exception 'Only the workspace owner can rename it.';
+  end if;
+  if p_name is null or char_length(trim(p_name)) = 0 then
+    raise exception 'Workspace name is required.';
+  end if;
+  if char_length(trim(p_name)) > 60 then
+    raise exception 'Workspace name must be 60 characters or fewer.';
+  end if;
+
+  update public.workspaces
+     set name = trim(p_name)
+   where id = p_workspace_id
+   returning * into v_ws;
+
+  return v_ws;
+end;
+$$;
+
+-- Delete a workspace entirely. Owner only. The ON DELETE CASCADE foreign keys
+-- on members, messages and agents clean up everything else automatically.
+create or replace function public.delete_workspace(p_workspace_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_workspace_owner(p_workspace_id) then
+    raise exception 'Only the workspace owner can delete it.';
+  end if;
+  delete from public.workspaces where id = p_workspace_id;
+end;
+$$;
+
+-- Leave a workspace (remove your own membership). For NON-owners: an owner must
+-- delete the workspace instead, so it never ends up ownerless.
+create or replace function public.leave_workspace(p_workspace_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then
+    raise exception 'You must be signed in.';
+  end if;
+  if public.is_workspace_owner(p_workspace_id) then
+    raise exception 'The owner cannot leave; delete the workspace instead.';
+  end if;
+  delete from public.workspace_members
+   where workspace_id = p_workspace_id
+     and user_id = v_user;
+end;
+$$;
+
+grant execute on function public.is_workspace_owner(uuid)        to authenticated;
+grant execute on function public.rename_workspace(uuid, text)    to authenticated;
+grant execute on function public.delete_workspace(uuid)          to authenticated;
+grant execute on function public.leave_workspace(uuid)           to authenticated;
+
+
 -- ============================================================================
 -- Milestone 3 — Shared live chat feed
 -- (Re-running this section is safe; everything is guarded.)

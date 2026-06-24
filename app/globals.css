@@ -151,6 +151,11 @@
 .rl-faint { transition: color 0.12s; }
 .rl-faint:hover { color: #E0E1DD !important; }
 
+/* dropdown menu items (the workspace "⋯" menu) */
+.rl-menuitem { transition: background 0.12s, color 0.12s; }
+.rl-menuitem:hover { background: rgba(119, 141, 169, 0.10); }
+.rl-menuitem-danger:hover { background: rgba(240, 160, 160, 0.10); color: #f0a0a0 !important; }
+
 /* gradient send / primary buttons */
 .rl-send { transition: opacity 0.12s; }
 .rl-send:hover { opacity: 0.9; }

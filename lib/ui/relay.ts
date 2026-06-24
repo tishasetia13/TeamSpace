@@ -23,9 +23,11 @@ export const RELAY = {
   person: '#6cb0e6',
   agent: '#cdd6dd',
   agentText: '#2a2a2e',
-  // Your own bubbles (translucent blue) vs others (--elev).
-  mineBg: 'rgba(108,176,230,0.16)',
-  mineBorder: 'rgba(108,176,230,0.30)',
+  // Your own bubbles: a solid slate-blue gradient in the same accent family as
+  // the Send button, so "your" messages and "your" send action share an
+  // identity — and clearly stand apart from the dark `elev` boxes of others.
+  mineBg: 'linear-gradient(135deg,#50749c,#36567c)',
+  mineBorder: 'rgba(160,184,214,0.22)',
   // Sender name colors: people blue, agents light slate.
   personName: '#6cb0e6',
   agentName: '#c7d2da',

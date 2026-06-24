@@ -41,6 +41,83 @@ export async function createWorkspaceAction(
   redirect(`/workspaces/${data.id}`)
 }
 
+// Rename a workspace. Called from the workspace menu (owner only — the database
+// function enforces that). Returns an error string for the UI to show, or null.
+export async function renameWorkspaceAction(
+  workspaceId: string,
+  name: string,
+): Promise<{ error: string | null }> {
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return { error: 'Please enter a workspace name.' }
+  }
+  if (trimmed.length > 60) {
+    return { error: 'Workspace name must be 60 characters or fewer.' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  const { error } = await supabase.rpc('rename_workspace', {
+    p_workspace_id: workspaceId,
+    p_name: trimmed,
+  })
+  if (error) {
+    return { error: error.message ?? 'Could not rename the workspace.' }
+  }
+
+  revalidatePath(`/workspaces/${workspaceId}`)
+  revalidatePath('/dashboard')
+  return { error: null }
+}
+
+// Delete a workspace (owner only — enforced in the database). On success this
+// throws a redirect to the dashboard, so it does not return on the happy path.
+export async function deleteWorkspaceAction(
+  workspaceId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  const { error } = await supabase.rpc('delete_workspace', {
+    p_workspace_id: workspaceId,
+  })
+  if (error) {
+    return { error: error.message ?? 'Could not delete the workspace.' }
+  }
+
+  revalidatePath('/dashboard')
+  redirect('/dashboard')
+}
+
+// Leave a workspace (non-owners only — enforced in the database). On success
+// this throws a redirect to the dashboard.
+export async function leaveWorkspaceAction(
+  workspaceId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'You must be signed in.' }
+
+  const { error } = await supabase.rpc('leave_workspace', {
+    p_workspace_id: workspaceId,
+  })
+  if (error) {
+    return { error: error.message ?? 'Could not leave the workspace.' }
+  }
+
+  revalidatePath('/dashboard')
+  redirect('/dashboard')
+}
+
 // Called by the "Join" button on the invite page.
 export async function joinWorkspaceAction(formData: FormData) {
   const token = String(formData.get('token') ?? '').trim()

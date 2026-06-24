@@ -520,13 +520,6 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
                 <div style={{ flex: 1, padding: '24px 26px', minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                     <span style={{ fontSize: '13.5px', color: C.muted }}>{hero.workspace.name}</span>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#46587a" strokeWidth="2.5">
-                      <path d="M9 6l6 6-6 6" />
-                    </svg>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: C.green }} />
-                    <span suppressHydrationWarning style={{ fontFamily: MONO, fontSize: 11, color: C.green, background: 'rgba(70,198,138,0.12)', padding: '2px 7px', borderRadius: 20 }}>
-                      {hero.lastMessage ? fmtTime(hero.lastMessage.createdAt) : 'new'}
-                    </span>
                   </div>
 
                   {hero.lastMessage ? (
