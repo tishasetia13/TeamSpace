@@ -64,19 +64,6 @@ const C = {
 const FONT = "var(--font-hanken), system-ui, sans-serif"
 const MONO = "var(--font-jetbrains), ui-monospace, monospace"
 
-// Deterministic 12-hour formatter — locale-independent so the server and client
-// render byte-identical output (toLocaleTimeString differs between Node and the
-// browser, which causes hydration mismatches). Timezone differences are covered
-// by suppressHydrationWarning on the spans that show the result.
-function fmtTime(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const m = String(d.getMinutes()).padStart(2, '0')
-  const ap = d.getHours() < 12 ? 'AM' : 'PM'
-  const h = ((d.getHours() + 11) % 12) + 1
-  return `${h}:${m} ${ap}`
-}
-
 function AvatarTile({ a, first }: { a: HubAvatar; first: boolean }) {
   const isAgent = a.kind === 'agent'
   return (
@@ -171,14 +158,13 @@ function WorkspaceCard({ ws }: { ws: HubWorkspace }) {
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '6px 0',
+          flexDirection: 'column',
+          gap: 10,
           marginTop: 'auto',
         }}
       >
         <AvatarStack ws={ws} />
-        <span style={{ marginLeft: 11, fontSize: '12.5px', color: C.muted }}>
+        <span style={{ fontSize: '12.5px', color: C.muted }}>
           <strong style={{ color: '#C5D0DD', fontWeight: 600 }}>
             {ws.agentCount} agent{ws.agentCount === 1 ? '' : 's'} ·{' '}
             {ws.peopleCount} {ws.peopleCount === 1 ? 'person' : 'people'}
@@ -242,7 +228,7 @@ function CreateTile({ onClick }: { onClick: () => void }) {
 }
 
 export default function WorkspacesHub({ data }: { data: HubData }) {
-  const { workspaces, hero, displayName, email } = data
+  const { workspaces, displayName, email } = data
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -497,81 +483,6 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
           </div>
         ) : (
           <>
-            {/* ===== JUMP BACK IN ===== */}
-            {hero && (
-              <Link
-                href={`/workspaces/${hero.workspace.id}`}
-                className="dq-hero"
-                style={{
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  marginBottom: 48,
-                  borderRadius: 20,
-                  background: C.hero,
-                  border: `1px solid ${C.border}`,
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  animation: 'ds-rise .55s ease .05s both',
-                  transition: 'border-color .2s, transform .2s, box-shadow .2s',
-                }}
-              >
-                <div style={{ flex: 1, padding: '24px 26px', minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                    <span style={{ fontSize: '13.5px', color: C.muted }}>{hero.workspace.name}</span>
-                  </div>
-
-                  {hero.lastMessage ? (
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '14px 16px', borderRadius: 14, background: 'rgba(13,27,42,0.5)', border: `1px solid rgba(119,141,169,0.12)` }}>
-                      <AvatarTile a={{ initial: hero.lastMessage.senderInitial, kind: hero.lastMessage.senderKind }} first />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 3 }}>
-                          <span style={{ fontWeight: 700, fontSize: '13.5px', color: C.head2 }}>{hero.lastMessage.senderName}</span>
-                          <span suppressHydrationWarning style={{ fontFamily: MONO, fontSize: '10.5px', color: C.muted2 }}>{fmtTime(hero.lastMessage.createdAt)}</span>
-                        </div>
-                        <div style={{ fontSize: '13.5px', color: C.body, lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {hero.lastMessage.body}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(13,27,42,0.5)', border: `1px solid rgba(119,141,169,0.12)`, fontSize: '13.5px', color: C.muted }}>
-                      No messages yet — jump in and say hi 👋
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ flex: 'none', width: 230, borderLeft: `1px solid rgba(119,141,169,0.14)`, background: 'rgba(13,27,42,0.32)', padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 12, color: C.muted2, marginBottom: 9 }}>Working in this workspace</div>
-                    <AvatarStack ws={hero.workspace} />
-                  </div>
-                  <span
-                    className="dq-accent"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      height: 42,
-                      borderRadius: 12,
-                      background: C.accent,
-                      color: '#F2F5F8',
-                      fontWeight: 700,
-                      fontSize: '14.5px',
-                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), 0 5px 14px rgba(28,53,84,0.5)',
-                    }}
-                  >
-                    Continue
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M5 12h14M13 6l6 6-6 6" />
-                    </svg>
-                  </span>
-                </div>
-              </Link>
-            )}
-
             {/* ===== YOUR WORKSPACES ===== */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
               <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, letterSpacing: '-0.01em', color: C.head2 }}>
