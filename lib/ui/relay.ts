@@ -5,34 +5,34 @@
 // as `.rl-*` classes in globals.css.
 
 export const RELAY = {
-  bg: '#0D1B2A',
-  bg2: '#0a1521',
-  panel: '#16263c',
-  elev: '#20344c',
-  hover: 'rgba(119,141,169,0.07)',
-  active: 'rgba(119,141,169,0.14)',
-  border: 'rgba(119,141,169,0.16)',
-  border2: 'rgba(119,141,169,0.30)',
-  text: '#E0E1DD',
-  text2: '#90a4bd',
-  text3: '#5d738c',
-  accent: '#778DA9',
-  accent2: '#9fb4cd',
-  white: '#E0E1DD',
+  bg: '#0b0b0c',
+  bg2: '#000000',
+  panel: '#141415',
+  elev: '#1c1c1e',
+  hover: 'rgba(255,255,255,0.06)',
+  active: 'rgba(255,255,255,0.10)',
+  border: 'rgba(255,255,255,0.08)',
+  border2: 'rgba(255,255,255,0.16)',
+  text: '#f2f2f0',
+  text2: '#9a9a9a',
+  text3: '#6b6b6b',
+  accent: '#f0994d',
+  accent2: '#f7b877',
+  white: '#f2f2f0',
   // People = blue circles, agents = light squares (with dark letters).
-  person: '#6cb0e6',
+  person: '#f0994d',
   agent: '#cdd6dd',
   agentText: '#2a2a2e',
-  // Your own bubbles: a solid slate-blue gradient in the same accent family as
+  // Your own bubbles: a solid amber-orange gradient in the same accent family as
   // the Send button, so "your" messages and "your" send action share an
   // identity — and clearly stand apart from the dark `elev` boxes of others.
-  mineBg: 'linear-gradient(135deg,#50749c,#36567c)',
-  mineBorder: 'rgba(160,184,214,0.22)',
-  // Sender name colors: people blue, agents light slate.
-  personName: '#6cb0e6',
+  mineBg: '#c9762e',
+  mineBorder: 'rgba(201,118,46,0.28)',
+  // Sender name colors: people orange, agents light slate.
+  personName: '#f0994d',
   agentName: '#c7d2da',
   // Gradient for send / primary actions.
-  sendGrad: 'linear-gradient(135deg,#778DA9,#415A77)',
+  sendGrad: 'linear-gradient(135deg,#f5a95f,#e0812f)',
   green: '#6fbf9a',
 } as const
 

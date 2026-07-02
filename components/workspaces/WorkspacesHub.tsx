@@ -43,23 +43,23 @@ export type HubData = {
 
 // ---- palette (from the Claude Design mockup) ------------------------------
 const C = {
-  bg: '#0D1B2A',
+  bg: '#0a0a0a',
   text: '#E0E1DD',
   head: '#EDEFEC',
   head2: '#E7E9E4',
-  muted: '#8295AE',
-  muted2: '#5E7289',
-  muted3: '#7C8FA6',
-  body: '#9FAFC4',
-  border: 'rgba(119,141,169,0.18)',
+  muted: '#9a9a9a',
+  muted2: '#6b6b6b',
+  muted3: '#8a8a8a',
+  body: '#b0b0b0',
+  border: 'rgba(255,255,255,0.10)',
   green: '#46C68A',
-  accent: 'linear-gradient(180deg,#557AA6,#3D597E)',
-  card: 'linear-gradient(180deg,#16243B,#13203A)',
-  hero: 'linear-gradient(135deg,#17273F,#13203356)',
-  logo: 'linear-gradient(155deg,#4E6E97,#1B263B)',
-  person: 'linear-gradient(140deg,#5C7CA6,#778DA9)',
+  accent: 'linear-gradient(180deg,#f0994d,#d17f33)',
+  card: 'linear-gradient(180deg,#161616,#101010)',
+  hero: 'linear-gradient(135deg,#171717,#10101056)',
+  logo: 'linear-gradient(155deg,#1c1c1c,#0a0a0a)',
+  person: 'linear-gradient(140deg,#2a2a2a,#1a1a1a)',
   agent: 'linear-gradient(150deg,#D4DCE7,#AFBED2)',
-  ring: '0 0 0 2px #15233a',
+  ring: '0 0 0 2px #151515',
 }
 const FONT = "var(--font-hanken), system-ui, sans-serif"
 const MONO = "var(--font-jetbrains), ui-monospace, monospace"
@@ -183,8 +183,8 @@ function CreateTile({ onClick }: { onClick: () => void }) {
       className="dq-create"
       style={{
         borderRadius: 18,
-        background: 'rgba(22,35,58,0.35)',
-        border: '1.5px dashed rgba(119,141,169,0.28)',
+        background: 'rgba(255,255,255,0.04)',
+        border: '1.5px dashed rgba(255,255,255,0.16)',
         padding: 18,
         cursor: 'pointer',
         display: 'flex',
@@ -204,14 +204,14 @@ function CreateTile({ onClick }: { onClick: () => void }) {
           height: 46,
           borderRadius: 13,
           background:
-            'linear-gradient(150deg,rgba(85,122,166,0.28),rgba(27,38,59,0.4))',
-          border: '1px solid rgba(119,141,169,0.28)',
+            'linear-gradient(150deg,rgba(240,153,77,0.28),rgba(20,20,20,0.4))',
+          border: '1px solid rgba(255,255,255,0.16)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9C0DD" strokeWidth="2.2" strokeLinecap="round">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f0994d" strokeWidth="2.2" strokeLinecap="round">
           <path d="M12 5v14M5 12h14" />
         </svg>
       </div>
@@ -263,16 +263,16 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
     >
       <style>{`
         @keyframes ds-rise { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
-        .dq-card:hover { transform: translateY(-3px); border-color: rgba(119,141,169,0.4); box-shadow: 0 20px 44px rgba(0,0,0,0.45); }
-        .dq-hero:hover { border-color: rgba(119,141,169,0.4); transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0,0,0,0.4); }
-        .dq-create:hover { background: rgba(22,35,58,0.6); border-color: rgba(119,141,169,0.5); transform: translateY(-3px); }
-        .dq-accent:hover { background: linear-gradient(180deg,#5F84B0,#456185) !important; }
-        .dq-search:focus-within { border-color: rgba(119,141,169,0.32); }
-        .dq-brand:hover { background: rgba(27,38,59,0.7); }
+        .dq-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.22); box-shadow: 0 20px 44px rgba(0,0,0,0.45); }
+        .dq-hero:hover { border-color: rgba(255,255,255,0.22); transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0,0,0,0.4); }
+        .dq-create:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.28); transform: translateY(-3px); }
+        .dq-accent:hover { background: linear-gradient(180deg,#f5a95f,#d17f33) !important; }
+        .dq-search:focus-within { border-color: rgba(255,255,255,0.20); }
+        .dq-brand:hover { background: rgba(255,255,255,0.08); }
         .dq-search input::placeholder { color: ${C.muted2}; }
         .dq-search input { background: transparent; border: none; outline: none; color: ${C.text}; font-family: ${FONT}; font-size: 14px; width: 100%; }
         .dq-menuitem { cursor: pointer; }
-        .dq-menuitem[data-highlighted] { background: rgba(119,141,169,0.14); }
+        .dq-menuitem[data-highlighted] { background: rgba(255,255,255,0.08); }
       `}</style>
 
       {/* ambient glow */}
@@ -282,7 +282,7 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
           inset: 0,
           pointerEvents: 'none',
           background:
-            'radial-gradient(1100px 520px at 22% -8%,rgba(65,90,119,0.30),transparent 60%),radial-gradient(900px 500px at 92% 4%,rgba(119,141,169,0.10),transparent 55%)',
+            'radial-gradient(1100px 520px at 22% -8%,rgba(240,153,77,0.12),transparent 60%),radial-gradient(900px 500px at 92% 4%,rgba(255,255,255,0.05),transparent 55%)',
         }}
       />
 
@@ -297,10 +297,10 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
           gap: 14,
           height: 66,
           padding: '0 26px',
-          background: 'rgba(13,27,42,0.78)',
+          background: 'rgba(0,0,0,0.75)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
-          borderBottom: `1px solid rgba(119,141,169,0.14)`,
+          borderBottom: `1px solid rgba(255,255,255,0.08)`,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
@@ -339,12 +339,12 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
             height: 38,
             padding: '0 13px',
             borderRadius: 11,
-            background: 'rgba(27,38,59,0.55)',
-            border: `1px solid rgba(119,141,169,0.16)`,
+            background: 'rgba(255,255,255,0.05)',
+            border: `1px solid rgba(255,255,255,0.10)`,
             cursor: 'text',
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E7289" strokeWidth="2.2" strokeLinecap="round">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b6b6b" strokeWidth="2.2" strokeLinecap="round">
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4-4" />
           </svg>
@@ -371,7 +371,7 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
             border: 'none',
             borderRadius: 11,
             background: C.accent,
-            color: '#F2F5F8',
+            color: '#000000',
             fontFamily: FONT,
             fontWeight: 600,
             fontSize: 14,
@@ -404,7 +404,7 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
               fontSize: 14,
               color: '#FBFCFD',
               cursor: 'pointer',
-              boxShadow: '0 0 0 1px rgba(119,141,169,0.3)',
+              boxShadow: '0 0 0 1px rgba(255,255,255,0.16)',
             }}
           >
             {avatarInitial}
@@ -415,7 +415,7 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
                 style={{
                   minWidth: 220,
                   borderRadius: 14,
-                  background: '#13203A',
+                  background: '#141414',
                   border: `1px solid ${C.border}`,
                   padding: 6,
                   boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
@@ -467,7 +467,13 @@ export default function WorkspacesHub({ data }: { data: HubData }) {
         {/* hero text */}
         <div style={{ marginBottom: 38, animation: 'ds-rise .5s ease both' }}>
           <h1 style={{ margin: '0 0 8px', fontSize: 36, fontWeight: 800, letterSpacing: '-0.025em', color: C.head, lineHeight: 1.05 }}>
-            {greeting}
+            {firstName ? (
+              <>
+                Welcome back, <span style={{ color: '#f0994d' }}>{firstName}</span>
+              </>
+            ) : (
+              greeting
+            )}
           </h1>
           <p style={{ margin: 0, fontSize: 16, color: C.muted }}>
             Jump back in, or start something new.

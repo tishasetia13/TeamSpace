@@ -143,7 +143,7 @@ export default function AgentChat({
                 AI
               </span>
               {providerLabel && (
-                <span style={{ fontSize: 10.5, fontWeight: 600, color: RELAY.accent2, background: 'rgba(119,141,169,0.16)', padding: '2px 8px', borderRadius: 20 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 600, color: RELAY.accent2, background: 'rgba(240,153,77,0.16)', padding: '2px 8px', borderRadius: 20 }}>
                   {providerLabel}
                 </span>
               )}
@@ -243,7 +243,7 @@ export default function AgentChat({
                   padding: '7px 11px 5px',
                 }}
               >
-                <div style={{ color: RELAY.text, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14 }}>
+                <div style={{ color: isMine ? '#000000' : RELAY.text, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 14 }}>
                   {m.body}
                 </div>
                 <div suppressHydrationWarning style={{ textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,0.32)', marginTop: 1 }}>
@@ -324,22 +324,24 @@ export default function AgentChat({
             type="submit"
             disabled={sending || !draft.trim()}
             className="rl-send"
+            aria-label="Send message"
             style={{
               flex: 'none',
-              background: RELAY.sendGrad,
-              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: RELAY.accent,
               border: 'none',
-              borderRadius: 8,
+              borderRadius: '50%',
+              width: 34,
               height: 34,
-              padding: '0 16px',
-              fontWeight: 600,
-              fontSize: 13,
               cursor: sending || !draft.trim() ? 'default' : 'pointer',
               opacity: sending || !draft.trim() ? 0.6 : 1,
-              fontFamily: FONT,
             }}
           >
-            {sending ? 'Sending…' : 'Send'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1a1206">
+              <path d="M3.4 20.6 21 12 3.4 3.4 3 10l12 2-12 2z" />
+            </svg>
           </button>
         </div>
       </form>

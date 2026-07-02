@@ -334,22 +334,24 @@ export default function ChatFeed({
             type="submit"
             disabled={sending || !draft.trim()}
             className="rl-send"
+            aria-label="Send message"
             style={{
               flex: 'none',
-              background: RELAY.sendGrad,
-              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: RELAY.accent,
               border: 'none',
-              borderRadius: 8,
+              borderRadius: '50%',
+              width: 34,
               height: 34,
-              padding: '0 16px',
-              fontWeight: 600,
-              fontSize: 13,
               cursor: sending || !draft.trim() ? 'default' : 'pointer',
               opacity: sending || !draft.trim() ? 0.6 : 1,
-              fontFamily: FONT,
             }}
           >
-            {sending ? 'Sending…' : 'Send'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1a1206">
+              <path d="M3.4 20.6 21 12 3.4 3.4 3 10l12 2-12 2z" />
+            </svg>
           </button>
         </div>
       </form>
